@@ -12,17 +12,22 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const { packageName } = await context.params;
   const cacheKey = `icon_${packageName}`;
 
+  const url = new URL(req.url);
+  const bypassCache = url.searchParams.has('t');
+
   // 1. Check in-memory LRU cache
-  const cached = mediaCache.get(cacheKey);
-  if (cached) {
-    return new NextResponse(new Uint8Array(cached.buffer), {
-      status: 200,
-      headers: {
-        'Content-Type': cached.contentType,
-        'Cache-Control': 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400',
-        'X-Cache': 'HIT',
-      },
-    });
+  if (!bypassCache) {
+    const cached = mediaCache.get(cacheKey);
+    if (cached) {
+      return new NextResponse(new Uint8Array(cached.buffer), {
+        status: 200,
+        headers: {
+          'Content-Type': cached.contentType,
+          'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
+          'X-Cache': 'HIT',
+        },
+      });
+    }
   }
 
   // 2. Fetch from WebDAV NAS
@@ -38,7 +43,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
       status: 200,
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400',
+        'Cache-Control': bypassCache
+          ? 'no-cache, no-store, must-revalidate'
+          : 'public, max-age=300, stale-while-revalidate=600',
         'X-Cache': 'MISS',
       },
     });

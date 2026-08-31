@@ -3,6 +3,7 @@ import { getAdminSession } from '@/lib/auth';
 import { manageApkVersioning } from '@/lib/webdav';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const stagingDir = path.join(process.cwd(), '.tmp_uploads', uploadId);
+    const stagingDir = path.join(os.tmpdir(), 'novastore_uploads', uploadId);
 
     if (!fs.existsSync(stagingDir)) {
       return NextResponse.json(

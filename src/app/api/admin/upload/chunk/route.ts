@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
     }
 
     const chunkIndex = parseInt(chunkIndexStr, 10);
-    const stagingDir = path.join(process.cwd(), '.tmp_uploads', uploadId);
+    const stagingDir = path.join(os.tmpdir(), 'novastore_uploads', uploadId);
 
     if (!fs.existsSync(stagingDir)) {
       fs.mkdirSync(stagingDir, { recursive: true });

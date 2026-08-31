@@ -20,9 +20,17 @@ export default function MediaUploader({
   onScreenshotsChange,
   disabled = false,
 }: MediaUploaderProps) {
+  const [previewIconUrl, setPreviewIconUrl] = useState<string>(iconUrl);
   const [uploadingIcon, setUploadingIcon] = useState(false);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync iconUrl prop changes
+  React.useEffect(() => {
+    if (iconUrl && !iconUrl.startsWith('blob:')) {
+      setPreviewIconUrl(iconUrl);
+    }
+  }, [iconUrl]);
 
   const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
@@ -32,6 +40,10 @@ export default function MediaUploader({
     }
 
     const file = e.target.files[0];
+    // Immediate instant preview
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewIconUrl(objectUrl);
+
     setUploadingIcon(true);
     setError(null);
 
@@ -47,9 +59,12 @@ export default function MediaUploader({
       });
       if (!res.ok) throw new Error('Failed to upload app icon');
       const data = await res.json();
+      const updatedUrl = `${data.url}?t=${Date.now()}`;
       onIconChange(data.url);
+      setPreviewIconUrl(updatedUrl);
     } catch (err: any) {
       setError(err.message || 'Error uploading icon');
+      setPreviewIconUrl(iconUrl);
     } finally {
       setUploadingIcon(false);
     }
@@ -100,9 +115,9 @@ export default function MediaUploader({
         </label>
         <div className="flex items-center gap-4">
           <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0 relative group">
-            {iconUrl ? (
+            {previewIconUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={iconUrl} alt="App Icon" className="w-full h-full object-cover" />
+              <img src={previewIconUrl} alt="App Icon" className="w-full h-full object-cover" />
             ) : (
               <ImageIcon className="w-8 h-8 text-slate-500" />
             )}
