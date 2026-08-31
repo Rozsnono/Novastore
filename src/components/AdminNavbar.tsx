@@ -54,6 +54,18 @@ export default function AdminNavbar({ currentPath }: AdminNavbarProps) {
             </Link>
 
             <Link
+              href="/admin/users"
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                currentPath === '/admin/users'
+                  ? 'bg-white/10 text-white'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
+              }`}
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>Users & Roles</span>
+            </Link>
+
+            <Link
               href="/admin/logs"
               className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 currentPath === '/admin/logs'

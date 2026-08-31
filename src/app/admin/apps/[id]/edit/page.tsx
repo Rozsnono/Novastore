@@ -6,8 +6,8 @@ import Link from 'next/link';
 import AdminNavbar from '@/components/AdminNavbar';
 import ChunkedUploader from '@/components/ChunkedUploader';
 import MediaUploader from '@/components/MediaUploader';
-import { ArrowLeft, Save, AlertCircle, RefreshCw, CheckCircle, Loader2 } from 'lucide-react';
-import { IAppItem } from '@/types';
+import { ArrowLeft, Save, AlertCircle, RefreshCw, CheckCircle, Loader2, Shield } from 'lucide-react';
+import { IAppItem, AppAccessLevel } from '@/types';
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -32,7 +32,12 @@ export default function EditAppPage({ params }: PageProps) {
     screenshots: [] as string[],
     apkWebDavPath: '',
     sizeBytes: 0,
+    accessLevel: 'public' as AppAccessLevel,
+    requiredRoles: [] as string[],
+    requiredPermissions: [] as string[],
   });
+
+  const [customPermInput, setCustomPermInput] = useState('');
 
   useEffect(() => {
     async function fetchApp() {
@@ -51,7 +56,11 @@ export default function EditAppPage({ params }: PageProps) {
           screenshots: data.data.screenshots || [],
           apkWebDavPath: data.data.apkWebDavPath,
           sizeBytes: data.data.sizeBytes,
+          accessLevel: data.data.accessLevel || 'public',
+          requiredRoles: data.data.requiredRoles || [],
+          requiredPermissions: data.data.requiredPermissions || [],
         });
+        setCustomPermInput((data.data.requiredPermissions || []).join(', '));
       } catch (err: any) {
         setError(err.message || 'Failed to load app');
       } finally {
@@ -61,25 +70,42 @@ export default function EditAppPage({ params }: PageProps) {
     fetchApp();
   }, [id]);
 
+  const handleRoleToggle = (role: string) => {
+    setFormData((prev) => {
+      const exists = prev.requiredRoles.includes(role);
+      const updated = exists
+        ? prev.requiredRoles.filter((r) => r !== role)
+        : [...prev.requiredRoles, role];
+      return { ...prev, requiredRoles: updated };
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSaving(true);
 
+    const payload = {
+      ...formData,
+      requiredPermissions: customPermInput
+        ? customPermInput.split(',').map((p) => p.trim()).filter(Boolean)
+        : formData.requiredPermissions,
+    };
+
     try {
       const res = await fetch(`/api/admin/apps/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to update application');
+      if (!res.ok) throw new Error(data.error || 'Hiba történt az alkalmazás frissítésekor');
 
       router.push('/admin');
       router.refresh();
     } catch (err: any) {
-      setError(err.message || 'Error updating application');
+      setError(err.message || 'Hiba történt a mentés során');
     } finally {
       setSaving(false);
     }
@@ -107,7 +133,7 @@ export default function EditAppPage({ params }: PageProps) {
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
-              <h1 className="text-2xl font-extrabold text-white">Edit Application</h1>
+              <h1 className="text-2xl font-extrabold text-white">Alkalmazás Szerkesztése</h1>
               <p className="text-xs font-mono text-indigo-400">{formData.packageName}</p>
             </div>
           </div>
@@ -117,13 +143,13 @@ export default function EditAppPage({ params }: PageProps) {
           {/* Basic Details */}
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
             <h2 className="text-base font-bold text-white border-b border-white/10 pb-3">
-              Application Details
+              Alapadatok
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  App Title *
+                  Alkalmazás Neve *
                 </label>
                 <input
                   type="text"
@@ -136,7 +162,7 @@ export default function EditAppPage({ params }: PageProps) {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Package Name (Locked)
+                  Csomagnév (Zárolt)
                 </label>
                 <input
                   type="text"
@@ -148,7 +174,7 @@ export default function EditAppPage({ params }: PageProps) {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Version Name *
+                  Verziószám *
                 </label>
                 <input
                   type="text"
@@ -161,7 +187,7 @@ export default function EditAppPage({ params }: PageProps) {
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Version Code *
+                  Verziókód *
                 </label>
                 <input
                   type="number"
@@ -178,7 +204,7 @@ export default function EditAppPage({ params }: PageProps) {
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                Description *
+                Leírás *
               </label>
               <textarea
                 required
@@ -190,10 +216,133 @@ export default function EditAppPage({ params }: PageProps) {
             </div>
           </div>
 
+          {/* Section 2: Access Control & Permissions */}
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
+            <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
+              <Shield className="w-4 h-4 text-indigo-400" />
+              <span>Hozzáférési Szint & Jogosultságok</span>
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'public'
+                    ? 'bg-indigo-500/10 border-indigo-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="public"
+                  checked={formData.accessLevel === 'public'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'public' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">🌍 Nyilvános (Public)</span>
+                <span className="text-xs text-slate-400">Bárki letöltheti regisztráció nélkül.</span>
+              </label>
+
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'registered'
+                    ? 'bg-indigo-500/10 border-indigo-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="registered"
+                  checked={formData.accessLevel === 'registered'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'registered' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">👤 Regisztráltak</span>
+                <span className="text-xs text-slate-400">Bejelentkezett fiók szükséges a letöltéshez.</span>
+              </label>
+
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'age_18'
+                    ? 'bg-amber-500/10 border-amber-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="age_18"
+                  checked={formData.accessLevel === 'age_18'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'age_18' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">🔞 18+ Korhatáros</span>
+                <span className="text-xs text-slate-400">Csak 18 éven felüli regisztrált felhasználóknak.</span>
+              </label>
+
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'restricted'
+                    ? 'bg-purple-500/10 border-purple-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="restricted"
+                  checked={formData.accessLevel === 'restricted'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'restricted' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">🔒 Zárt / VIP Hozzáférés</span>
+                <span className="text-xs text-slate-400">Csak a kijelölt szerepkörök tölthetik le.</span>
+              </label>
+            </div>
+
+            {formData.accessLevel === 'restricted' && (
+              <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  Engedélyezett Szerepkörök (Roles)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {['vip', 'tester', 'developer', 'admin'].map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => handleRoleToggle(role)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                        formData.requiredRoles.includes(role)
+                          ? 'bg-indigo-500 border-indigo-400 text-white shadow-md'
+                          : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                      }`}
+                    >
+                      {role.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Egyedi jogosultsági címkék (vesszővel elválasztva)
+                  </label>
+                  <input
+                    type="text"
+                    value={customPermInput}
+                    onChange={(e) => setCustomPermInput(e.target.value)}
+                    placeholder="pl. internal-tools, cluedo-beta, staff"
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Media Assets */}
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
             <h2 className="text-base font-bold text-white border-b border-white/10 pb-3">
-              Media & Assets
+              Média & Ikonok
             </h2>
 
             <MediaUploader
@@ -209,14 +358,14 @@ export default function EditAppPage({ params }: PageProps) {
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
             <div>
               <h2 className="text-base font-bold text-white flex items-center justify-between">
-                <span>Upload New APK Version (4MB Chunked)</span>
+                <span>Új APK Verzió Feltöltése (4MB Darabolt WebDAV)</span>
                 <span className="text-xs text-slate-400 font-mono">
-                  Current size: {(formData.sizeBytes / (1024 * 1024)).toFixed(1)} MB
+                  Jelenlegi méret: {(formData.sizeBytes / (1024 * 1024)).toFixed(1)} MB
                 </span>
               </h2>
               <p className="text-xs text-slate-400 mt-1">
-                Uploading a new version will preserve the current APK on your WebDAV NAS as a backup
-                and automatically purge older iterations.
+                Új verzió feltöltésekor a korábbi aktív verzió automatikusan biztonsági másolatként (backup)
+                mentődik a WebDAV szerveren.
               </p>
             </div>
 
@@ -245,7 +394,7 @@ export default function EditAppPage({ params }: PageProps) {
               href="/admin"
               className="px-5 py-3 rounded-xl text-sm font-semibold text-slate-300 hover:bg-white/5 border border-white/10 transition-colors"
             >
-              Cancel
+              Mégse
             </Link>
 
             <button
@@ -254,7 +403,7 @@ export default function EditAppPage({ params }: PageProps) {
               className="glow-button px-8 py-3.5 rounded-xl text-sm font-bold text-white flex items-center gap-2 shadow-lg disabled:opacity-50 transition-all"
             >
               <Save className="w-4 h-4" />
-              <span>{saving ? 'Saving Changes...' : 'Save & Update Package'}</span>
+              <span>{saving ? 'Mentés folyamatban...' : 'Módosítások Mentése'}</span>
             </button>
           </div>
         </form>

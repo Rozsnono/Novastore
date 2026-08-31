@@ -6,7 +6,8 @@ import Link from 'next/link';
 import AdminNavbar from '@/components/AdminNavbar';
 import ChunkedUploader from '@/components/ChunkedUploader';
 import MediaUploader from '@/components/MediaUploader';
-import { ArrowLeft, Save, AlertCircle, Sparkles, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Save, AlertCircle, Sparkles, CheckCircle, Shield, Lock } from 'lucide-react';
+import { AppAccessLevel, UserRole } from '@/types';
 
 export default function NewAppPage() {
   const router = useRouter();
@@ -20,48 +21,69 @@ export default function NewAppPage() {
     screenshots: [] as string[],
     apkWebDavPath: '',
     sizeBytes: 0,
+    accessLevel: 'public' as AppAccessLevel,
+    requiredRoles: [] as string[],
+    requiredPermissions: [] as string[],
   });
 
+  const [customPermInput, setCustomPermInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleRoleToggle = (role: string) => {
+    setFormData((prev) => {
+      const exists = prev.requiredRoles.includes(role);
+      const updated = exists
+        ? prev.requiredRoles.filter((r) => r !== role)
+        : [...prev.requiredRoles, role];
+      return { ...prev, requiredRoles: updated };
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     if (!formData.title || !formData.packageName || !formData.versionName || !formData.description) {
-      setError('Please fill in all basic application details.');
+      setError('Kérlek töltsd ki az alkalmazás alapadatokat.');
       return;
     }
 
     if (!formData.iconUrl) {
-      setError('Please upload an App Icon.');
+      setError('Kérlek tölts fel egy alkalmazás ikont.');
       return;
     }
 
     if (!formData.apkWebDavPath) {
-      setError('Please upload the APK file using the chunked uploader below.');
+      setError('Kérlek töltsd fel az APK fájlt a lenti feltöltővel.');
       return;
     }
 
     setLoading(true);
 
+    const payload = {
+      ...formData,
+      requiredPermissions: customPermInput
+        ? customPermInput.split(',').map((p) => p.trim()).filter(Boolean)
+        : formData.requiredPermissions,
+    };
+
     try {
       const res = await fetch('/api/admin/apps', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to create application');
+        throw new Error(data.error || 'Hiba történt az alkalmazás mentésekor');
       }
 
       router.push('/admin');
       router.refresh();
     } catch (err: any) {
-      setError(err.message || 'Error saving application');
+      setError(err.message || 'Hiba történt a mentés során');
     } finally {
       setLoading(false);
     }
@@ -81,9 +103,9 @@ export default function NewAppPage() {
               <ArrowLeft className="w-4 h-4" />
             </Link>
             <div>
-              <h1 className="text-2xl font-extrabold text-white">Add New Application</h1>
+              <h1 className="text-2xl font-extrabold text-white">Új Alkalmazás Hozzáadása</h1>
               <p className="text-xs text-slate-400">
-                Deploy a new Android package with 4MB chunked streaming
+                Alkalmazáscsomag közzététele 4MB darabolt WebDAV streameléssel és jogosultságokkal
               </p>
             </div>
           </div>
@@ -94,27 +116,27 @@ export default function NewAppPage() {
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
             <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
               <Sparkles className="w-4 h-4 text-indigo-400" />
-              <span>Application Details</span>
+              <span>Alapadatok</span>
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  App Title *
+                  Alkalmazás Neve *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="e.g. Nova Analytics"
+                  placeholder="pl. Nova Analytics"
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Package Name (Unique) *
+                  Csomagnév (Egyedi azonosító) *
                 </label>
                 <input
                   type="text"
@@ -126,28 +148,28 @@ export default function NewAppPage() {
                       packageName: e.target.value.toLowerCase().trim(),
                     })
                   }
-                  placeholder="e.g. com.nova.analytics"
+                  placeholder="pl. com.nova.analytics"
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Version Name *
+                  Verziószám (Kijelzett) *
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.versionName}
                   onChange={(e) => setFormData({ ...formData, versionName: e.target.value })}
-                  placeholder="e.g. 1.0.0"
+                  placeholder="pl. 1.0.0"
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Version Code (Integer) *
+                  Verziókód (Egész szám) *
                 </label>
                 <input
                   type="number"
@@ -157,7 +179,7 @@ export default function NewAppPage() {
                   onChange={(e) =>
                     setFormData({ ...formData, versionCode: parseInt(e.target.value, 10) || 1 })
                   }
-                  placeholder="e.g. 1"
+                  placeholder="pl. 1"
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -165,23 +187,146 @@ export default function NewAppPage() {
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                Description *
+                Leírás *
               </label>
               <textarea
                 required
                 rows={4}
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Detailed description of features, permissions, and changelog..."
+                placeholder="Részletes leírás az alkalmazás funkcióiról és újdonságairól..."
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
 
-          {/* Section 2: Media Assets (Icon & Screenshots) */}
+          {/* Section 2: Access Control & Permissions */}
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
+            <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
+              <Shield className="w-4 h-4 text-indigo-400" />
+              <span>Hozzáférési Szint & Jogosultságok</span>
+            </h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'public'
+                    ? 'bg-indigo-500/10 border-indigo-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="public"
+                  checked={formData.accessLevel === 'public'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'public' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">🌍 Nyilvános (Public)</span>
+                <span className="text-xs text-slate-400">Bárki letöltheti regisztráció nélkül.</span>
+              </label>
+
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'registered'
+                    ? 'bg-indigo-500/10 border-indigo-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="registered"
+                  checked={formData.accessLevel === 'registered'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'registered' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">👤 Regisztráltak</span>
+                <span className="text-xs text-slate-400">Bejelentkezett fiók szükséges a letöltéshez.</span>
+              </label>
+
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'age_18'
+                    ? 'bg-amber-500/10 border-amber-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="age_18"
+                  checked={formData.accessLevel === 'age_18'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'age_18' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">🔞 18+ Korhatáros</span>
+                <span className="text-xs text-slate-400">Csak 18 éven felüli regisztrált felhasználóknak.</span>
+              </label>
+
+              <label
+                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
+                  formData.accessLevel === 'restricted'
+                    ? 'bg-purple-500/10 border-purple-500 text-white'
+                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="accessLevel"
+                  value="restricted"
+                  checked={formData.accessLevel === 'restricted'}
+                  onChange={() => setFormData({ ...formData, accessLevel: 'restricted' })}
+                  className="hidden"
+                />
+                <span className="font-bold text-sm">🔒 Zárt / VIP Hozzáférés</span>
+                <span className="text-xs text-slate-400">Csak a kijelölt szerepkörök tölthetik le.</span>
+              </label>
+            </div>
+
+            {formData.accessLevel === 'restricted' && (
+              <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
+                  Engedélyezett Szerepkörök (Roles)
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {['vip', 'tester', 'developer', 'admin'].map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => handleRoleToggle(role)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                        formData.requiredRoles.includes(role)
+                          ? 'bg-indigo-500 border-indigo-400 text-white shadow-md'
+                          : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
+                      }`}
+                    >
+                      {role.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+                    Egyedi jogosultsági címkék (vesszővel elválasztva)
+                  </label>
+                  <input
+                    type="text"
+                    value={customPermInput}
+                    onChange={(e) => setCustomPermInput(e.target.value)}
+                    placeholder="pl. internal-tools, cluedo-beta, staff"
+                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 3: Media Assets (Icon & Screenshots) */}
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
             <h2 className="text-base font-bold text-white border-b border-white/10 pb-3">
-              Media & Assets
+              Média & Ikonok
             </h2>
 
             <MediaUploader
@@ -193,14 +338,14 @@ export default function NewAppPage() {
             />
           </div>
 
-          {/* Section 3: 4MB Chunked APK Upload */}
+          {/* Section 4: 4MB Chunked APK Upload */}
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
             <h2 className="text-base font-bold text-white border-b border-white/10 pb-3 flex items-center justify-between">
-              <span>Android APK Binary (4MB Chunked WebDAV Stream)</span>
+              <span>Android APK Bináris (4MB Darabolt Feltöltés)</span>
               {formData.apkWebDavPath && (
                 <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-medium">
                   <CheckCircle className="w-3.5 h-3.5" />
-                  <span>APK Ready</span>
+                  <span>APK Készen áll</span>
                 </span>
               )}
             </h2>
@@ -230,7 +375,7 @@ export default function NewAppPage() {
               href="/admin"
               className="px-5 py-3 rounded-xl text-sm font-semibold text-slate-300 hover:bg-white/5 border border-white/10 transition-colors"
             >
-              Cancel
+              Mégse
             </Link>
 
             <button
@@ -239,7 +384,7 @@ export default function NewAppPage() {
               className="glow-button px-8 py-3.5 rounded-xl text-sm font-bold text-white flex items-center gap-2 shadow-lg disabled:opacity-50 transition-all"
             >
               <Save className="w-4 h-4" />
-              <span>{loading ? 'Publishing App...' : 'Publish Application'}</span>
+              <span>{loading ? 'Közzététel...' : 'Alkalmazás Közzététele'}</span>
             </button>
           </div>
         </form>

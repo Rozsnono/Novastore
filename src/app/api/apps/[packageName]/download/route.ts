@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
 import { getFileBufferFromWebDAV } from '@/lib/webdav';
+import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,16 @@ export async function GET(req: NextRequest, context: RouteContext) {
       return NextResponse.json(
         { error: `APK for package "${packageName}" not found` },
         { status: 404 }
+      );
+    }
+
+    // Access control verification
+    const user = await getUserFromRequest(req);
+    const access = canUserAccessApp(user, app);
+    if (!access.allowed) {
+      return NextResponse.json(
+        { error: access.reason || 'Hozzáférés megtagadva ehhez az alkalmazáshoz' },
+        { status: 403 }
       );
     }
 

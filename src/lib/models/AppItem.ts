@@ -59,13 +59,36 @@ const AppItemSchema = new Schema<IAppItemDocument>(
       type: Boolean,
       default: false,
     },
+    accessLevel: {
+      type: String,
+      enum: ['public', 'registered', 'restricted', 'age_18'],
+      default: 'public',
+      index: true,
+    },
+    requiredRoles: {
+      type: [String],
+      default: [],
+    },
+    requiredPermissions: {
+      type: [String],
+      default: [],
+    },
+    averageRating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5,
+    },
+    ratingCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
   }
 );
 
-// Prevent mongoose model overwrite compilation errors in Next.js hot reloading
 const AppItem: Model<IAppItemDocument> =
   mongoose.models.AppItem || mongoose.model<IAppItemDocument>('AppItem', AppItemSchema);
 
