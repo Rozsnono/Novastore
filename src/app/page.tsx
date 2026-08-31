@@ -24,15 +24,19 @@ export const dynamic = 'force-dynamic';
 async function getLandingData() {
   try {
     await connectToDatabase();
-    const apps = await AppItem.find().sort({ downloadCount: -1 }).limit(12).lean();
-    const totalApps = await AppItem.countDocuments();
-    const downloadStats = await AppItem.aggregate([
-      { $group: { _id: null, totalDownloads: { $sum: '$downloadCount' } } },
+    const [apps, totalApps, novaStoreApp, downloadStats] = await Promise.all([
+      AppItem.find({ packageName: { $ne: 'com.novastore.app' } })
+        .sort({ downloadCount: -1 })
+        .limit(12)
+        .lean(),
+      AppItem.countDocuments({ packageName: { $ne: 'com.novastore.app' } }),
+      AppItem.findOne({ packageName: 'com.novastore.app' }).lean(),
+      AppItem.aggregate([
+        { $group: { _id: null, totalDownloads: { $sum: '$downloadCount' } } },
+      ]),
     ]);
+
     const totalDownloads = downloadStats[0]?.totalDownloads || 0;
-    const novaStoreApp = apps.find(
-      (a: any) => a.packageName.toLowerCase() === 'com.novastore.app'
-    );
 
     return {
       apps: JSON.parse(JSON.stringify(apps)),

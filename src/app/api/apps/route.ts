@@ -14,13 +14,23 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
     const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
 
-    const query: any = {};
+    // Filter out NovaStore itself from general app store catalog listings
+    const query: any = {
+      packageName: { $ne: 'com.novastore.app' },
+    };
+
     if (search.trim()) {
-      query.$or = [
-        { title: { $regex: search.trim(), $options: 'i' } },
-        { packageName: { $regex: search.trim(), $options: 'i' } },
-        { description: { $regex: search.trim(), $options: 'i' } },
+      query.$and = [
+        { packageName: { $ne: 'com.novastore.app' } },
+        {
+          $or: [
+            { title: { $regex: search.trim(), $options: 'i' } },
+            { packageName: { $regex: search.trim(), $options: 'i' } },
+            { description: { $regex: search.trim(), $options: 'i' } },
+          ],
+        },
       ];
+      delete query.packageName;
     }
 
     let sortOption: any = { downloadCount: -1 };
