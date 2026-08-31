@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Upload, CheckCircle2, AlertCircle, FileCode2, Loader2 } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, FileCode2, Loader2, Clock, Zap, Gauge } from 'lucide-react';
 
 interface ChunkedUploaderProps {
   packageName: string;
@@ -26,16 +26,36 @@ export default function ChunkedUploader({
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isDone, setIsDone] = useState(false);
+  
+  // Real-time upload metrics
+  const [uploadSpeedMBs, setUploadSpeedMBs] = useState<string>('0.0');
+  const [estimatedTimeStr, setEstimatedTimeStr] = useState<string>('');
+  const [uploadedMB, setUploadedMB] = useState<string>('0.0');
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const formatSeconds = (sec: number): string => {
+    if (!isFinite(sec) || sec <= 0) return 'pár másodperc';
+    const rounded = Math.round(sec);
+    if (rounded < 60) {
+      return `kb. ${rounded} mp`;
+    }
+    const mins = Math.floor(rounded / 60);
+    const remainingSec = rounded % 60;
+    return `${mins} perc ${remainingSec > 0 ? `${remainingSec} mp` : ''}`;
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
     setIsDone(false);
     setProgress(0);
+    setEstimatedTimeStr('');
+    setUploadSpeedMBs('0.0');
+    setUploadedMB('0.0');
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       if (!selectedFile.name.endsWith('.apk')) {
-        setError('Please select a valid Android APK file (.apk)');
+        setError('Kérlek válassz érvényes Android APK fájlt (.apk)');
         return;
       }
       setFile(selectedFile);
@@ -44,35 +64,40 @@ export default function ChunkedUploader({
 
   const startChunkedUpload = async () => {
     if (!file) {
-      setError('Please select an APK file first.');
+      setError('Kérlek válassz ki egy APK fájlt.');
       return;
     }
     if (!packageName.trim()) {
-      setError('Please enter a Package Name before uploading the APK.');
+      setError('Kérlek add meg a Csomagnevet (Package Name) a feltöltés előtt.');
       return;
     }
     if (!versionCode || versionCode < 1) {
-      setError('Please enter a valid Version Code before uploading the APK.');
+      setError('Kérlek adj meg érvényes Verziókódot a feltöltés előtt.');
       return;
     }
 
     setUploading(true);
     setError(null);
     setIsDone(false);
+    setProgress(0);
 
     const calculatedTotalChunks = Math.ceil(file.size / CHUNK_SIZE);
     setTotalChunks(calculatedTotalChunks);
     const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
+    const startTime = Date.now();
+    let totalUploadedBytes = 0;
+
     try {
       // 1. Upload each 4MB chunk sequentially
       for (let chunkIdx = 0; chunkIdx < calculatedTotalChunks; chunkIdx++) {
         setCurrentChunk(chunkIdx + 1);
-        setStatusMessage(`Uploading chunk ${chunkIdx + 1} of ${calculatedTotalChunks} (4MB)...`);
+        setStatusMessage(`Darab feltöltése: ${chunkIdx + 1} / ${calculatedTotalChunks} (4MB szeletek)...`);
 
         const start = chunkIdx * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunkBlob = file.slice(start, end);
+        const chunkSize = end - start;
 
         const formData = new FormData();
         formData.append('uploadId', uploadId);
@@ -82,6 +107,7 @@ export default function ChunkedUploader({
         formData.append('packageName', packageName.trim());
         formData.append('chunk', chunkBlob);
 
+        const chunkStartTime = Date.now();
         const response = await fetch('/api/admin/upload/chunk', {
           method: 'POST',
           body: formData,
@@ -89,15 +115,33 @@ export default function ChunkedUploader({
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Chunk ${chunkIdx + 1} upload failed`);
+          throw new Error(errData.error || `${chunkIdx + 1}. darab feltöltése sikertelen`);
         }
+
+        totalUploadedBytes += chunkSize;
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        
+        if (elapsedSec > 0) {
+          const speedBytesPerSec = totalUploadedBytes / elapsedSec;
+          const speedMBs = speedBytesPerSec / (1024 * 1024);
+          setUploadSpeedMBs(speedMBs.toFixed(1));
+
+          const remainingBytes = file.size - totalUploadedBytes;
+          const etaSec = speedBytesPerSec > 0 ? remainingBytes / speedBytesPerSec : 0;
+          setEstimatedTimeStr(formatSeconds(etaSec));
+        }
+
+        const uploadedMegabytes = (totalUploadedBytes / (1024 * 1024)).toFixed(1);
+        setUploadedMB(uploadedMegabytes);
 
         const currentPct = Math.round(((chunkIdx + 1) / calculatedTotalChunks) * 90);
         setProgress(currentPct);
       }
 
       // 2. Trigger Complete & Assembly
-      setStatusMessage('Assembling chunks and pushing to WebDAV NAS storage...');
+      setStatusMessage('Darabok összefűzése és mentése a WebDAV NAS tárolóra...');
+      setEstimatedTimeStr('feldolgozás...');
+      
       const completeRes = await fetch('/api/admin/upload/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,24 +157,27 @@ export default function ChunkedUploader({
 
       if (!completeRes.ok) {
         const errData = await completeRes.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to assemble and upload APK to WebDAV NAS');
+        throw new Error(errData.error || 'A darabok összefűzése és NAS mentése sikertelen');
       }
 
       const result = await completeRes.json();
       setProgress(100);
       setIsDone(true);
-      setStatusMessage('APK verified & stored on NAS successfully!');
+      setEstimatedTimeStr('Kész!');
+      setStatusMessage('APK sikeresen ellenőrizve és feltöltve a WebDAV tárolóra!');
       onUploadSuccess({
         apkWebDavPath: result.apkWebDavPath,
         sizeBytes: result.sizeBytes || file.size,
       });
     } catch (err: any) {
       console.error('Upload failed:', err);
-      setError(err.message || 'An error occurred during APK chunked upload.');
+      setError(err.message || 'Hiba történt a darabolt APK feltöltése közben.');
     } finally {
       setUploading(false);
     }
   };
+
+  const totalSizeMB = file ? (file.size / (1024 * 1024)).toFixed(1) : '0.0';
 
   return (
     <div className="space-y-4">
@@ -169,15 +216,15 @@ export default function ChunkedUploader({
               <div className="space-y-1">
                 <p className="font-semibold text-slate-200">{file.name}</p>
                 <p className="text-xs text-slate-400">
-                  {(file.size / (1024 * 1024)).toFixed(2)} MB • {Math.ceil(file.size / CHUNK_SIZE)} chunks of 4MB
+                  {totalSizeMB} MB • {Math.ceil(file.size / CHUNK_SIZE)} szelet (4MB-os darabok)
                 </p>
               </div>
             ) : (
               <div className="space-y-1">
                 <p className="text-sm font-medium text-slate-200">
-                  Click to select or drag & drop Android APK file
+                  Kattints ide vagy húzd ide az Android APK fájlt
                 </p>
-                <p className="text-xs text-slate-500">Supports all APK binaries (.apk)</p>
+                <p className="text-xs text-slate-500">Minden szabványos Android csomag támogatott (.apk)</p>
               </div>
             )}
           </div>
@@ -195,12 +242,12 @@ export default function ChunkedUploader({
             {uploading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Uploading Chunks ({progress}%)...</span>
+                <span>Feltöltés folyamatban ({progress}%)...</span>
               </>
             ) : (
               <>
                 <Upload className="w-4 h-4" />
-                <span>Upload APK in 4MB Chunks</span>
+                <span>APK Feltöltése 4MB-os szeletekben</span>
               </>
             )}
           </button>
@@ -208,16 +255,54 @@ export default function ChunkedUploader({
       )}
 
       {uploading && (
-        <div className="space-y-2 bg-black/30 p-4 rounded-xl border border-white/5">
-          <div className="flex justify-between text-xs text-slate-300">
-            <span>{statusMessage}</span>
-            <span className="font-mono text-indigo-400">{progress}%</span>
+        <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-white/10 shadow-lg">
+          {/* Top Status & Percentage */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
+            <span className="text-slate-300 font-medium">{statusMessage}</span>
+            <span className="font-mono text-indigo-400 font-bold text-sm sm:text-xs">
+              {progress}%
+            </span>
           </div>
-          <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+
+          {/* Progress Bar */}
+          <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden p-0.5">
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-300 rounded-full"
+              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 transition-all duration-300 rounded-full shadow-sm"
               style={{ width: `${progress}%` }}
             />
+          </div>
+
+          {/* Metrics Row: Speed, Uploaded MB, Estimated Time Remaining */}
+          <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/5 text-[11px]">
+            {/* Speed */}
+            <div className="flex items-center gap-1.5 text-slate-300">
+              <Zap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase font-semibold">Sebesség</p>
+                <p className="font-mono font-bold text-white">{uploadSpeedMBs} MB/s</p>
+              </div>
+            </div>
+
+            {/* Transferred Size */}
+            <div className="flex items-center gap-1.5 text-slate-300 text-center justify-center">
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase font-semibold">Átvitel</p>
+                <p className="font-mono font-bold text-white">
+                  {uploadedMB} / {totalSizeMB} MB
+                </p>
+              </div>
+            </div>
+
+            {/* Estimated Remaining Time (ETA) */}
+            <div className="flex items-center gap-1.5 text-slate-300 justify-end text-right">
+              <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <div>
+                <p className="text-[10px] text-slate-500 uppercase font-semibold">Hátralévő idő</p>
+                <p className="font-bold text-emerald-400">
+                  {estimatedTimeStr || 'számítás...'}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
