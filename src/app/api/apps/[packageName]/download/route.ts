@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Readable } from 'stream';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
-import { getFileBufferFromWebDAV } from '@/lib/webdav';
+import { getFileStreamFromWebDAV, getFileStatFromWebDAV } from '@/lib/webdav';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
 
 export const dynamic = 'force-dynamic';
@@ -34,13 +35,20 @@ export async function GET(req: NextRequest, context: RouteContext) {
       );
     }
 
-    // Fetch APK buffer from WebDAV NAS
-    const fullBuffer = await getFileBufferFromWebDAV(app.apkWebDavPath);
-    const totalSize = fullBuffer.length;
+    // Determine total size
+    let totalSize = Number(app.sizeBytes) || 0;
+    if (totalSize <= 0) {
+      try {
+        const stat = await getFileStatFromWebDAV(app.apkWebDavPath);
+        totalSize = Number(stat.size) || 0;
+      } catch (e) {
+        console.warn(`Could not stat WebDAV file ${app.apkWebDavPath}:`, e);
+      }
+    }
 
     const rangeHeader = req.headers.get('range');
 
-    if (rangeHeader) {
+    if (rangeHeader && totalSize > 0) {
       // Parse Range header e.g. "bytes=0-4194303"
       const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
       if (match) {
@@ -56,15 +64,17 @@ export async function GET(req: NextRequest, context: RouteContext) {
           });
         }
 
-        const chunk = fullBuffer.subarray(start, end + 1);
+        const chunkLength = end - start + 1;
+        const nodeStream = await getFileStreamFromWebDAV(app.apkWebDavPath, { start, end });
+        const webStream = Readable.toWeb(nodeStream as Readable);
 
-        return new NextResponse(new Uint8Array(chunk), {
+        return new NextResponse(webStream as any, {
           status: 206,
           headers: {
             'Content-Type': 'application/vnd.android.package-archive',
             'Content-Range': `bytes ${start}-${end}/${totalSize}`,
             'Accept-Ranges': 'bytes',
-            'Content-Length': chunk.length.toString(),
+            'Content-Length': chunkLength.toString(),
             'Cache-Control': 'no-cache',
             'Content-Disposition': `attachment; filename="${packageName}-v${app.versionCode}.apk"`,
           },
@@ -72,16 +82,24 @@ export async function GET(req: NextRequest, context: RouteContext) {
       }
     }
 
-    // Full file download (fallback if no range requested)
-    return new NextResponse(new Uint8Array(fullBuffer), {
+    // Full file streaming download (Instant start, no RAM buffering)
+    const nodeStream = await getFileStreamFromWebDAV(app.apkWebDavPath);
+    const webStream = Readable.toWeb(nodeStream as Readable);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/vnd.android.package-archive',
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-cache',
+      'Content-Disposition': `attachment; filename="${packageName}-v${app.versionCode}.apk"`,
+    };
+
+    if (totalSize > 0) {
+      headers['Content-Length'] = totalSize.toString();
+    }
+
+    return new NextResponse(webStream as any, {
       status: 200,
-      headers: {
-        'Content-Type': 'application/vnd.android.package-archive',
-        'Accept-Ranges': 'bytes',
-        'Content-Length': totalSize.toString(),
-        'Cache-Control': 'no-cache',
-        'Content-Disposition': `attachment; filename="${packageName}-v${app.versionCode}.apk"`,
-      },
+      headers,
     });
   } catch (error: any) {
     console.error(`Error streaming APK download for ${packageName}:`, error);

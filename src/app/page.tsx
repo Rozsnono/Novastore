@@ -25,12 +25,12 @@ async function getLandingData() {
   try {
     await connectToDatabase();
     const [apps, totalApps, novaStoreApp, downloadStats] = await Promise.all([
-      AppItem.find({ packageName: { $ne: 'com.novastore.app' } })
+      AppItem.find({ packageName: { $not: { $regex: /^com\.novastore\.app$/i } } })
         .sort({ downloadCount: -1 })
         .limit(12)
         .lean(),
-      AppItem.countDocuments({ packageName: { $ne: 'com.novastore.app' } }),
-      AppItem.findOne({ packageName: 'com.novastore.app' }).lean(),
+      AppItem.countDocuments({ packageName: { $not: { $regex: /^com\.novastore\.app$/i } } }),
+      AppItem.findOne({ packageName: { $regex: /^com\.novastore\.app$/i } }).lean(),
       AppItem.aggregate([
         { $group: { _id: null, totalDownloads: { $sum: '$downloadCount' } } },
       ]),
@@ -42,18 +42,16 @@ async function getLandingData() {
       apps: JSON.parse(JSON.stringify(apps)),
       totalApps,
       totalDownloads,
-      novaStoreVersion: novaStoreApp?.versionName ? `v${novaStoreApp.versionName}` : 'v1.0.0',
-      novaStoreDownloadUrl: novaStoreApp
-        ? `/api/apps/com.novastore.app/download`
-        : '/novastore.apk',
+      novaStoreVersion: (novaStoreApp as any)?.versionName ? `v${(novaStoreApp as any).versionName}` : 'v2.0.1',
+      novaStoreDownloadUrl: '/api/apps/com.novastore.app/download',
     };
   } catch (e) {
     return {
       apps: [],
       totalApps: 0,
       totalDownloads: 0,
-      novaStoreVersion: 'v1.0.0',
-      novaStoreDownloadUrl: '/novastore.apk',
+      novaStoreVersion: 'v2.0.1',
+      novaStoreDownloadUrl: '/api/apps/com.novastore.app/download',
     };
   }
 }
