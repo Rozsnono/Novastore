@@ -17,8 +17,6 @@ import {
 import AppItem from '@/lib/models/AppItem';
 import { connectToDatabase } from '@/lib/db';
 
-export const revalidate = 60; // 60s ISR
-
 async function getStats() {
   try {
     await connectToDatabase();
@@ -27,9 +25,21 @@ async function getStats() {
       { $group: { _id: null, totalDownloads: { $sum: '$downloadCount' } } },
     ]);
     const totalDownloads = downloadStats[0]?.totalDownloads || 0;
-    return { totalApps, totalDownloads };
+    const novaStoreApp = await AppItem.findOne({ packageName: 'com.novastore.app' });
+
+    return {
+      totalApps,
+      totalDownloads,
+      novaStoreVersion: novaStoreApp?.versionName ? `v${novaStoreApp.versionName}` : 'v1.0.0',
+      novaStoreDownloadUrl: novaStoreApp ? `/api/apps/com.novastore.app/download` : '/novastore.apk',
+    };
   } catch (e) {
-    return { totalApps: 12, totalDownloads: 1480 };
+    return {
+      totalApps: 0,
+      totalDownloads: 0,
+      novaStoreVersion: 'v1.0.0',
+      novaStoreDownloadUrl: '/novastore.apk',
+    };
   }
 }
 
@@ -66,13 +76,13 @@ export default async function HomePage() {
             {/* CTA Buttons */}
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
               <a
-                href="/novastore.apk"
+                href={stats.novaStoreDownloadUrl}
                 download="novastore.apk"
                 className="glow-button w-full sm:w-auto px-8 py-4 rounded-2xl text-base font-bold text-white flex items-center justify-center gap-3 shadow-xl transform active:scale-95 transition-all"
               >
                 <Download className="w-5 h-5 text-white" />
                 <span>Download NovaStore APK</span>
-                <span className="text-xs px-2 py-0.5 bg-white/20 rounded-full">v1.0</span>
+                <span className="text-xs px-2 py-0.5 bg-white/20 rounded-full">{stats.novaStoreVersion}</span>
               </a>
 
               <Link
