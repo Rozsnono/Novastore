@@ -9,11 +9,13 @@
   --border-color: rgba(255, 255, 255, 0.08);
 }
 
-body {
+html, body {
   color: var(--foreground);
   background: var(--background);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   min-height: 100vh;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 /* Custom Glassmorphism styles */
