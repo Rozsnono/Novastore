@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { Upload, CheckCircle2, AlertCircle, FileCode2, Loader2, Clock, Zap, Gauge } from 'lucide-react';
+import { Upload, CheckCircle2, AlertCircle, FileCode2, Loader2, Clock, Zap } from 'lucide-react';
 
 interface ChunkedUploaderProps {
   packageName: string;
@@ -10,7 +10,20 @@ interface ChunkedUploaderProps {
   disabled?: boolean;
 }
 
-const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB Chunk
+// 20MB chunk size: maximizes upload throughput directly to Synology NAS (same as NewFileSharer)
+const CHUNK_SIZE = 20 * 1024 * 1024;
+const UPLOAD_API_KEY = process.env.NEXT_PUBLIC_UPLOAD_API_KEY || 'test-secret-key-12345';
+
+function resolveUploadApiUrl(): string {
+  let configured = (process.env.NEXT_PUBLIC_UPLOAD_API_URL || '').trim();
+  if (!configured) {
+    configured = 'https://api.filesharer.rozsnorbert.hu:9443';
+  }
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && configured.startsWith('http://')) {
+    configured = configured.replace(/^http:\/\//, 'https://');
+  }
+  return configured.replace(/\/+$/, '');
+}
 
 export default function ChunkedUploader({
   packageName,
@@ -21,17 +34,15 @@ export default function ChunkedUploader({
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [currentChunk, setCurrentChunk] = useState(0);
-  const [totalChunks, setTotalChunks] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isDone, setIsDone] = useState(false);
-  
+
   // Real-time upload metrics
   const [uploadSpeedMBs, setUploadSpeedMBs] = useState<string>('0.0');
   const [estimatedTimeStr, setEstimatedTimeStr] = useState<string>('');
   const [uploadedMB, setUploadedMB] = useState<string>('0.0');
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatSeconds = (sec: number): string => {
@@ -62,12 +73,13 @@ export default function ChunkedUploader({
     }
   };
 
-  const startChunkedUpload = async () => {
+  const startDirectNasUpload = async () => {
     if (!file) {
       setError('Kérlek válassz ki egy APK fájlt.');
       return;
     }
-    if (!packageName.trim()) {
+    const sanitizedPackage = packageName.trim();
+    if (!sanitizedPackage) {
       setError('Kérlek add meg a Csomagnevet (Package Name) a feltöltés előtt.');
       return;
     }
@@ -81,46 +93,97 @@ export default function ChunkedUploader({
     setIsDone(false);
     setProgress(0);
 
-    const calculatedTotalChunks = Math.ceil(file.size / CHUNK_SIZE);
-    setTotalChunks(calculatedTotalChunks);
-    const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+    const targetPath = `/novastore/apps/${sanitizedPackage}/apk`;
+    const targetFilename = `app-v${versionCode}.apk`;
+    const uploadApiUrl = resolveUploadApiUrl();
 
+    let remoteUploadId: string | null = null;
     const startTime = Date.now();
     let totalUploadedBytes = 0;
 
     try {
-      // 1. Upload each 4MB chunk sequentially
-      for (let chunkIdx = 0; chunkIdx < calculatedTotalChunks; chunkIdx++) {
-        setCurrentChunk(chunkIdx + 1);
-        setStatusMessage(`Darab feltöltése: ${chunkIdx + 1} / ${calculatedTotalChunks} (4MB szeletek)...`);
+      // 1. Start Upload Session on the dedicated Synology NAS Upload API
+      setStatusMessage('Feltöltési munkamenet indítása a NAS tárolón...');
+      const startResponse = await fetch(`${uploadApiUrl}/upload/start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': UPLOAD_API_KEY,
+        },
+        body: JSON.stringify({
+          filename: targetFilename,
+          totalChunks,
+          chunkSize: CHUNK_SIZE,
+          targetPath,
+        }),
+      });
 
+      if (!startResponse.ok) {
+        const startData = await startResponse.json().catch(() => ({}));
+        throw new Error(
+          startData.message || startData.error || `A feltöltés indítása sikertelen (${startResponse.status})`
+        );
+      }
+
+      const startData = await startResponse.json();
+      remoteUploadId = startData.uploadId;
+
+      // 2. Upload Chunks sequentially directly to Synology NAS with retry mechanism
+      for (let chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
         const start = chunkIdx * CHUNK_SIZE;
         const end = Math.min(start + CHUNK_SIZE, file.size);
         const chunkBlob = file.slice(start, end);
         const chunkSize = end - start;
 
+        setStatusMessage(
+          `Feltöltés a NAS-ra: ${chunkIdx + 1} / ${totalChunks} (${(chunkSize / (1024 * 1024)).toFixed(1)} MB szelet)...`
+        );
+
         const formData = new FormData();
-        formData.append('uploadId', uploadId);
+        formData.append('file', chunkBlob, targetFilename);
+        formData.append('uploadId', remoteUploadId!);
         formData.append('chunkIndex', chunkIdx.toString());
-        formData.append('totalChunks', calculatedTotalChunks.toString());
-        formData.append('fileName', file.name);
-        formData.append('packageName', packageName.trim());
-        formData.append('chunk', chunkBlob);
+        formData.append('totalChunks', totalChunks.toString());
+        formData.append('filename', targetFilename);
 
-        const chunkStartTime = Date.now();
-        const response = await fetch('/api/admin/upload/chunk', {
-          method: 'POST',
-          body: formData,
-        });
+        let chunkUploaded = false;
+        let chunkError = '';
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `${chunkIdx + 1}. darab feltöltése sikertelen`);
+        // Try uploading chunk up to 3 times with exponential backoff
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            const chunkResponse = await fetch(`${uploadApiUrl}/upload/chunk`, {
+              method: 'POST',
+              headers: {
+                'x-api-key': UPLOAD_API_KEY,
+              },
+              body: formData,
+            });
+
+            if (chunkResponse.ok) {
+              chunkUploaded = true;
+              break;
+            } else {
+              const errData = await chunkResponse.json().catch(() => ({}));
+              chunkError = errData.message || errData.error || `HTTP ${chunkResponse.status}`;
+            }
+          } catch (netErr: any) {
+            chunkError = netErr.message;
+          }
+
+          if (attempt < 3) {
+            await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+          }
+        }
+
+        if (!chunkUploaded) {
+          throw new Error(`Sikertelen darab feltöltés ${chunkIdx + 1}/${totalChunks}: ${chunkError}`);
         }
 
         totalUploadedBytes += chunkSize;
         const elapsedSec = (Date.now() - startTime) / 1000;
-        
+
         if (elapsedSec > 0) {
           const speedBytesPerSec = totalUploadedBytes / elapsedSec;
           const speedMBs = speedBytesPerSec / (1024 * 1024);
@@ -131,47 +194,67 @@ export default function ChunkedUploader({
           setEstimatedTimeStr(formatSeconds(etaSec));
         }
 
-        const uploadedMegabytes = (totalUploadedBytes / (1024 * 1024)).toFixed(1);
-        setUploadedMB(uploadedMegabytes);
-
-        const currentPct = Math.round(((chunkIdx + 1) / calculatedTotalChunks) * 90);
+        setUploadedMB((totalUploadedBytes / (1024 * 1024)).toFixed(1));
+        const currentPct = Math.round(((chunkIdx + 1) / totalChunks) * 92);
         setProgress(currentPct);
       }
 
-      // 2. Trigger Complete & Assembly
-      setStatusMessage('Darabok összefűzése és mentése a WebDAV NAS tárolóra...');
-      setEstimatedTimeStr('feldolgozás...');
-      
-      const completeRes = await fetch('/api/admin/upload/complete', {
+      // 3. Finalize & Stream Merge directly on Synology NAS
+      setStatusMessage('Darabok véglegesítése és streaming mentés WebDAV tárolóra...');
+      setEstimatedTimeStr('összefűzés...');
+
+      const finishResponse = await fetch(`${uploadApiUrl}/upload/finish`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': UPLOAD_API_KEY,
+        },
         body: JSON.stringify({
-          uploadId,
-          totalChunks: calculatedTotalChunks,
-          fileName: file.name,
-          packageName: packageName.trim(),
-          versionCode: Number(versionCode),
-          totalBytes: file.size,
+          uploadId: remoteUploadId,
+          totalChunks,
+          filename: targetFilename,
+          targetPath,
         }),
       });
 
-      if (!completeRes.ok) {
-        const errData = await completeRes.json().catch(() => ({}));
-        throw new Error(errData.error || 'A darabok összefűzése és NAS mentése sikertelen');
+      if (!finishResponse.ok) {
+        const finishData = await finishResponse.json().catch(() => ({}));
+        throw new Error(
+          finishData.message || finishData.error || `A végleges összefűzés sikertelen (${finishResponse.status})`
+        );
       }
 
-      const result = await completeRes.json();
+      const finishData = await finishResponse.json();
+      const finalDestination = finishData.destination || `${targetPath}/${targetFilename}`;
+
       setProgress(100);
       setIsDone(true);
       setEstimatedTimeStr('Kész!');
-      setStatusMessage('APK sikeresen ellenőrizve és feltöltve a WebDAV tárolóra!');
+      setStatusMessage('APK sikeresen feltöltve a Synology NAS tárolóra!');
+
       onUploadSuccess({
-        apkWebDavPath: result.apkWebDavPath,
-        sizeBytes: result.sizeBytes || file.size,
+        apkWebDavPath: finalDestination,
+        sizeBytes: finishData.size || file.size,
       });
     } catch (err: any) {
-      console.error('Upload failed:', err);
-      setError(err.message || 'Hiba történt a darabolt APK feltöltése közben.');
+      console.error('NAS upload failed:', err);
+
+      // Trigger cleanup on NAS if upload session was started
+      if (remoteUploadId) {
+        fetch(`${uploadApiUrl}/upload/failed`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': UPLOAD_API_KEY,
+          },
+          body: JSON.stringify({
+            uploadId: remoteUploadId,
+            filename: targetFilename,
+          }),
+        }).catch(() => {});
+      }
+
+      setError(err.message || 'Hiba történt az APK feltöltése közben.');
     } finally {
       setUploading(false);
     }
@@ -216,7 +299,7 @@ export default function ChunkedUploader({
               <div className="space-y-1">
                 <p className="font-semibold text-slate-200">{file.name}</p>
                 <p className="text-xs text-slate-400">
-                  {totalSizeMB} MB • {Math.ceil(file.size / CHUNK_SIZE)} szelet (4MB-os darabok)
+                  {totalSizeMB} MB • {Math.ceil(file.size / CHUNK_SIZE)} szelet (20MB közvetlen NAS szeletek)
                 </p>
               </div>
             ) : (
@@ -235,7 +318,7 @@ export default function ChunkedUploader({
         <div className="flex justify-end">
           <button
             type="button"
-            onClick={startChunkedUpload}
+            onClick={startDirectNasUpload}
             disabled={uploading || disabled || !packageName || !versionCode}
             className="glow-button px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 flex items-center gap-2"
           >
@@ -247,7 +330,7 @@ export default function ChunkedUploader({
             ) : (
               <>
                 <Upload className="w-4 h-4" />
-                <span>APK Feltöltése 4MB-os szeletekben</span>
+                <span>APK Feltöltése a Synology NAS-ra (20MB szeletek)</span>
               </>
             )}
           </button>

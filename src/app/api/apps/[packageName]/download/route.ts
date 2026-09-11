@@ -4,6 +4,7 @@ import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
 import { getFileStreamFromWebDAV, getFileStatFromWebDAV } from '@/lib/webdav';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
+import { buildDirectDownloadUrl } from '@/lib/storageApi';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,16 @@ export async function GET(req: NextRequest, context: RouteContext) {
         { error: access.reason || 'Hozzáférés megtagadva ehhez az alkalmazáshoz' },
         { status: 403 }
       );
+    }
+
+    const forceStream = req.nextUrl.searchParams.get('stream') === 'true';
+
+    // Direct high-performance redirect to dedicated NASiS3 download service (NewFileSharer pattern)
+    if (!forceStream) {
+      const directDownloadUrl = buildDirectDownloadUrl(app.apkWebDavPath);
+      if (directDownloadUrl.startsWith('https://')) {
+        return NextResponse.redirect(directDownloadUrl, 307);
+      }
     }
 
     // Determine total size
