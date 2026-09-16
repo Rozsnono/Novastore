@@ -90,5 +90,6 @@ export interface UpdateCheckResponse {
     iconUrl: string;
     sizeBytes: number;
     apkDownloadUrl: string;
+    updatedAt?: string | Date;
   }>;
 }

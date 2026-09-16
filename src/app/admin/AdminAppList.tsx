@@ -77,13 +77,14 @@ export default function AdminAppList({ initialApps }: AdminAppListProps) {
                 <th className="py-4 px-6">Version</th>
                 <th className="py-4 px-6">Size</th>
                 <th className="py-4 px-6">Downloads</th>
+                <th className="py-4 px-6">Utolsó frissítés</th>
                 <th className="py-4 px-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {filteredApps.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-500 text-sm">
+                  <td colSpan={7} className="py-12 text-center text-slate-500 text-sm">
                     {search ? 'No applications match your search query.' : 'No applications found. Upload your first APK!'}
                   </td>
                 </tr>
@@ -133,6 +134,29 @@ export default function AdminAppList({ initialApps }: AdminAppListProps) {
                         <Download className="w-3 h-3" />
                         <span>{app.downloadCount.toLocaleString()}</span>
                       </span>
+                    </td>
+
+                    <td className="py-4 px-6 text-xs text-slate-300">
+                      {app.updatedAt ? (
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-200">
+                            {new Date(app.updatedAt).toLocaleDateString('hu-HU', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                            })}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-mono">
+                            {new Date(app.updatedAt).toLocaleTimeString('hu-HU', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
                     </td>
 
                     <td className="py-4 px-6 text-right">

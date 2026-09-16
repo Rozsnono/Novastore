@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
           iconUrl: storeApp.iconUrl,
           sizeBytes: storeApp.sizeBytes,
           apkDownloadUrl: `/api/apps/${storeApp.packageName}/download`,
+          updatedAt: storeApp.updatedAt,
         });
       }
     }

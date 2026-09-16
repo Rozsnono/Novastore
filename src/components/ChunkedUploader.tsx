@@ -5,7 +5,7 @@ import { Upload, CheckCircle2, AlertCircle, FileCode2, Loader2, Clock, Zap } fro
 
 interface ChunkedUploaderProps {
   packageName: string;
-  versionCode: number;
+  versionCode: number | string;
   onUploadSuccess: (data: { apkWebDavPath: string; sizeBytes: number }) => void;
   disabled?: boolean;
 }
@@ -83,7 +83,8 @@ export default function ChunkedUploader({
       setError('Kérlek add meg a Csomagnevet (Package Name) a feltöltés előtt.');
       return;
     }
-    if (!versionCode || versionCode < 1) {
+    const numericVersion = Math.max(1, parseInt(String(versionCode), 10) || 1);
+    if (!versionCode || Number(versionCode) < 1) {
       setError('Kérlek adj meg érvényes Verziókódot a feltöltés előtt.');
       return;
     }
@@ -95,7 +96,7 @@ export default function ChunkedUploader({
 
     const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
     const targetPath = `/novastore/apps/${sanitizedPackage}/apk`;
-    const targetFilename = `app-v${versionCode}.apk`;
+    const targetFilename = `app-v${numericVersion}.apk`;
     const uploadApiUrl = resolveUploadApiUrl();
 
     let remoteUploadId: string | null = null;
@@ -319,7 +320,7 @@ export default function ChunkedUploader({
           <button
             type="button"
             onClick={startDirectNasUpload}
-            disabled={uploading || disabled || !packageName || !versionCode}
+            disabled={uploading || disabled || !packageName || !versionCode || Number(versionCode) < 1}
             className="glow-button px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 flex items-center gap-2"
           >
             {uploading ? (

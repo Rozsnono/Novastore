@@ -48,13 +48,19 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'App not found' }, { status: 404 });
     }
 
+    const newVersionCode =
+      body.versionCode !== undefined && body.versionCode !== null && body.versionCode !== ''
+        ? Number(body.versionCode)
+        : undefined;
+
     const isVersionChange =
-      body.versionCode !== undefined && body.versionCode > existingApp.versionCode;
+      newVersionCode !== undefined && newVersionCode > existingApp.versionCode;
 
     const updated = await AppItem.findByIdAndUpdate(
       id,
       {
         ...body,
+        ...(newVersionCode !== undefined ? { versionCode: newVersionCode } : {}),
         ...(isVersionChange ? { isUpdated: true } : {}),
       },
       { new: true, runValidators: true }

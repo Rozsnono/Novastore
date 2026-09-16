@@ -25,7 +25,7 @@ export default function EditAppPage({ params }: PageProps) {
   const [formData, setFormData] = useState({
     title: '',
     packageName: '',
-    versionCode: 1,
+    versionCode: 1 as number | string,
     versionName: '1.0.0',
     description: '',
     iconUrl: '',
@@ -85,8 +85,11 @@ export default function EditAppPage({ params }: PageProps) {
     setError(null);
     setSaving(true);
 
+    const finalVersionCode = Math.max(1, parseInt(String(formData.versionCode), 10) || 1);
+
     const payload = {
       ...formData,
+      versionCode: finalVersionCode,
       requiredPermissions: customPermInput
         ? customPermInput.split(',').map((p) => p.trim()).filter(Boolean)
         : formData.requiredPermissions,
@@ -155,7 +158,7 @@ export default function EditAppPage({ params }: PageProps) {
                   type="text"
                   required
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500"
                 />
               </div>
@@ -180,25 +183,42 @@ export default function EditAppPage({ params }: PageProps) {
                   type="text"
                   required
                   value={formData.versionName}
-                  onChange={(e) => setFormData({ ...formData, versionName: e.target.value })}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, versionName: e.target.value }))}
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Verziókód *
+                  Verziókód (Egész szám) *
                 </label>
                 <input
                   type="number"
                   required
                   min="1"
+                  step="1"
                   value={formData.versionCode}
-                  onChange={(e) =>
-                    setFormData({ ...formData, versionCode: parseInt(e.target.value, 10) || 1 })
-                  }
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      versionCode: raw === '' ? '' : parseInt(raw, 10) || '',
+                    }));
+                  }}
+                  onBlur={() => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      versionCode:
+                        !prev.versionCode || Number(prev.versionCode) < 1
+                          ? 1
+                          : Number(prev.versionCode),
+                    }));
+                  }}
                   className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-indigo-500"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Belső verziószám (pl. 7). Frissítés észlelésekor a kliens ezt hasonlítja össze.
+                </p>
               </div>
             </div>
 
@@ -210,7 +230,7 @@ export default function EditAppPage({ params }: PageProps) {
                 required
                 rows={4}
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500"
               />
             </div>
@@ -236,7 +256,7 @@ export default function EditAppPage({ params }: PageProps) {
                   name="accessLevel"
                   value="public"
                   checked={formData.accessLevel === 'public'}
-                  onChange={() => setFormData({ ...formData, accessLevel: 'public' })}
+                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'public' }))}
                   className="hidden"
                 />
                 <span className="font-bold text-sm">🌍 Nyilvános (Public)</span>
@@ -255,7 +275,7 @@ export default function EditAppPage({ params }: PageProps) {
                   name="accessLevel"
                   value="registered"
                   checked={formData.accessLevel === 'registered'}
-                  onChange={() => setFormData({ ...formData, accessLevel: 'registered' })}
+                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'registered' }))}
                   className="hidden"
                 />
                 <span className="font-bold text-sm">👤 Regisztráltak</span>
@@ -274,7 +294,7 @@ export default function EditAppPage({ params }: PageProps) {
                   name="accessLevel"
                   value="age_18"
                   checked={formData.accessLevel === 'age_18'}
-                  onChange={() => setFormData({ ...formData, accessLevel: 'age_18' })}
+                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'age_18' }))}
                   className="hidden"
                 />
                 <span className="font-bold text-sm">🔞 18+ Korhatáros</span>
@@ -293,7 +313,7 @@ export default function EditAppPage({ params }: PageProps) {
                   name="accessLevel"
                   value="restricted"
                   checked={formData.accessLevel === 'restricted'}
-                  onChange={() => setFormData({ ...formData, accessLevel: 'restricted' })}
+                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'restricted' }))}
                   className="hidden"
                 />
                 <span className="font-bold text-sm">🔒 Zárt / VIP Hozzáférés</span>
@@ -349,8 +369,8 @@ export default function EditAppPage({ params }: PageProps) {
               packageName={formData.packageName}
               iconUrl={formData.iconUrl}
               screenshots={formData.screenshots}
-              onIconChange={(url) => setFormData({ ...formData, iconUrl: url })}
-              onScreenshotsChange={(urls) => setFormData({ ...formData, screenshots: urls })}
+              onIconChange={(url) => setFormData((prev) => ({ ...prev, iconUrl: url }))}
+              onScreenshotsChange={(urls) => setFormData((prev) => ({ ...prev, screenshots: urls }))}
             />
           </div>
 
@@ -373,11 +393,11 @@ export default function EditAppPage({ params }: PageProps) {
               packageName={formData.packageName}
               versionCode={formData.versionCode}
               onUploadSuccess={({ apkWebDavPath, sizeBytes }) => {
-                setFormData({
-                  ...formData,
+                setFormData((prev) => ({
+                  ...prev,
                   apkWebDavPath,
                   sizeBytes,
-                });
+                }));
               }}
             />
           </div>
