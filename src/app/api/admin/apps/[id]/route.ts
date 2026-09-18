@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
-import { deleteWebDAVPath, getAppStoragePath } from '@/lib/webdav';
+import { deleteWebDAVPath, getAppStoragePath, enforceMaxApkRetention } from '@/lib/webdav';
 import mediaCache from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
@@ -65,6 +65,15 @@ export async function PUT(req: NextRequest, context: RouteContext) {
       },
       { new: true, runValidators: true }
     );
+
+    // Enforce max 3 APK retention on NAS
+    if (updated?.packageName) {
+      try {
+        await enforceMaxApkRetention(updated.packageName, 3);
+      } catch (retentionErr) {
+        console.warn(`[NAS Retention] Failed to enforce retention for ${updated.packageName}:`, retentionErr);
+      }
+    }
 
     return NextResponse.json({ success: true, data: updated });
   } catch (error: any) {

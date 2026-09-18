@@ -228,6 +228,15 @@ export default function ChunkedUploader({
       const finishData = await finishResponse.json();
       const finalDestination = finishData.destination || `${targetPath}/${targetFilename}`;
 
+      // Automatically clean up excess older APKs on NAS (enforce max 3 retention)
+      fetch('/api/admin/apps/clean-retention', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packageName, maxFiles: 3 }),
+      }).catch((cleanErr) => {
+        console.warn('Retention cleanup call failed:', cleanErr);
+      });
+
       setProgress(100);
       setIsDone(true);
       setEstimatedTimeStr('Kész!');

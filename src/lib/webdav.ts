@@ -122,73 +122,104 @@ export async function deleteWebDAVPath(remotePath: string): Promise<void> {
 }
 
 /**
- * Manage APK Versioning on WebDAV:
- * - Current version is placed at: /novastore/apps/{pkg}/apk/app-v{versionCode}.apk
- * - Immediate previous version is preserved as: /novastore/apps/{pkg}/apk/backup-v{oldVersionCode}.apk
- * - Any older backups are permanently deleted to conserve NAS space.
+ * Enforce maximum APK retention limit on WebDAV NAS.
+ * Keeps at most `maxFiles` (default: 3) newest APK files in the app's apk directory.
+ * The oldest files (by lastmod date) are permanently deleted.
  */
-export async function manageApkVersioning(
+export async function enforceMaxApkRetention(
   packageName: string,
-  newVersionCode: number,
-  newApkBuffer: Buffer
-): Promise<{ finalPath: string; sizeBytes: number }> {
+  maxFiles: number = 3
+): Promise<{ deleted: string[]; remaining: string[] }> {
   const client = getWebDAVClient();
   const appDir = getAppStoragePath(packageName);
   const apkDir = `${appDir}/apk`;
 
-  await ensureDirectoryExists(apkDir);
-
-  // List existing files in apk directory
   let existingItems: FileStat[] = [];
   try {
     const items = await client.getDirectoryContents(apkDir);
     existingItems = Array.isArray(items)
       ? (items as FileStat[])
       : ((items as any)?.data as FileStat[]) || [];
-  } catch {
-    existingItems = [];
+  } catch (err) {
+    console.warn(`[NAS Retention] Could not list ${apkDir}:`, err);
+    return { deleted: [], remaining: [] };
   }
 
-  // Identify current active apk (e.g. app-v1.apk) and existing backups
-  const currentActiveApk = existingItems.find(
-    (item) => item.basename.startsWith('app-v') && item.basename.endsWith('.apk')
-  );
-  const oldBackups = existingItems.filter(
-    (item) => item.basename.startsWith('backup-v') && item.basename.endsWith('.apk')
+  // Filter only .apk files
+  const apkFiles = existingItems.filter(
+    (item) => item.type === 'file' || item.basename.toLowerCase().endsWith('.apk')
   );
 
-  // 1. Delete all older backups to keep only 1 immediate prior version
-  for (const oldBackup of oldBackups) {
+  if (apkFiles.length <= maxFiles) {
+    return {
+      deleted: [],
+      remaining: apkFiles.map((f) => f.filename),
+    };
+  }
+
+  // Sort descending by last modified time (newest first)
+  apkFiles.sort((a, b) => {
+    const timeA = a.lastmod ? new Date(a.lastmod).getTime() : 0;
+    const timeB = b.lastmod ? new Date(b.lastmod).getTime() : 0;
+    if (timeB !== timeA) {
+      return timeB - timeA;
+    }
+    // Secondary fallback: extract version number if possible
+    const vA = parseInt((a.basename.match(/\d+/) || ['0'])[0], 10);
+    const vB = parseInt((b.basename.match(/\d+/) || ['0'])[0], 10);
+    return vB - vA;
+  });
+
+  const toKeep = apkFiles.slice(0, maxFiles);
+  const toDelete = apkFiles.slice(maxFiles);
+  const deleted: string[] = [];
+
+  for (const file of toDelete) {
     try {
-      await client.deleteFile(oldBackup.filename);
+      console.log(`[NAS Retention] Deleting excess old APK for ${packageName}: ${file.filename} (lastmod: ${file.lastmod})`);
+      await client.deleteFile(file.filename);
+      deleted.push(file.filename);
     } catch (err) {
-      console.warn(`Failed to delete old backup ${oldBackup.filename}:`, err);
+      console.error(`[NAS Retention] Failed to delete excess old APK ${file.filename}:`, err);
     }
   }
 
-  // 2. If there is a current active APK with a different version, rename it to backup
-  if (currentActiveApk) {
-    const match = currentActiveApk.basename.match(/^app-v(\d+)\.apk$/);
-    const oldVersion = match ? match[1] : 'prev';
-    const backupPath = `${apkDir}/backup-v${oldVersion}.apk`;
-    
-    try {
-      // Copy / move current to backup
-      await client.moveFile(currentActiveApk.filename, backupPath);
-    } catch {
-      // Fallback if move fails: delete current active
-      try {
-        await client.deleteFile(currentActiveApk.filename);
-      } catch {}
-    }
-  }
+  return {
+    deleted,
+    remaining: toKeep.map((f) => f.filename),
+  };
+}
 
-  // 3. Write the new version
+/**
+ * Manage APK Versioning on WebDAV:
+ * - Current version is placed at: /novastore/apps/{pkg}/apk/app-v{versionCode}.apk
+ * - Immediate previous version is preserved as: /novastore/apps/{pkg}/apk/backup-v{oldVersionCode}.apk
+ * - Any excess files beyond the 3 newest are permanently deleted.
+ */
+export async function manageApkVersioning(
+  packageName: string,
+  newVersionCode: number,
+  newApkBuffer: Buffer
+): Promise<{ finalPath: string; sizeBytes: number }> {
+  const appDir = getAppStoragePath(packageName);
+  const apkDir = `${appDir}/apk`;
+
+  await ensureDirectoryExists(apkDir);
+
+  // 1. Write the new version
   const newApkPath = `${apkDir}/app-v${newVersionCode}.apk`;
   await uploadBufferToWebDAV(newApkPath, newApkBuffer);
+
+  // 2. Enforce max 3 APK files retention on NAS
+  try {
+    await enforceMaxApkRetention(packageName, 3);
+  } catch (retentionErr) {
+    console.warn(`[NAS Retention] Error enforcing retention for ${packageName}:`, retentionErr);
+  }
 
   return {
     finalPath: newApkPath,
     sizeBytes: newApkBuffer.length,
   };
 }
+
