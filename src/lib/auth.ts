@@ -53,17 +53,49 @@ export async function verifyAdminSessionToken(token: string): Promise<AdminSessi
 
 /**
  * Validates the admin session from NextRequest or Server Components
+ * Supports cookies, x-admin-key header, or Authorization: Bearer <token> header
  */
 export async function getAdminSession(req?: NextRequest): Promise<AdminSession | null> {
-  let token: string | undefined;
-
   if (req) {
-    token = req.cookies.get(COOKIE_NAME)?.value;
-  } else {
-    const cookieStore = await cookies();
-    token = cookieStore.get(COOKIE_NAME)?.value;
+    // 1. Direct master key header check (useful for CI/CD and automated pipelines)
+    const adminKeyHeader = req.headers.get('x-admin-key');
+    if (adminKeyHeader && verifyMasterKey(adminKeyHeader)) {
+      return {
+        authenticated: true,
+        role: 'admin',
+        timestamp: Date.now(),
+      };
+    }
+
+    // 2. Bearer token check
+    const authHeader = req.headers.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const bearerToken = authHeader.substring(7).trim();
+      if (bearerToken) {
+        if (verifyMasterKey(bearerToken)) {
+          return {
+            authenticated: true,
+            role: 'admin',
+            timestamp: Date.now(),
+          };
+        }
+        const session = await verifyAdminSessionToken(bearerToken);
+        if (session) return session;
+      }
+    }
+
+    // 3. Cookie check
+    const cookieToken = req.cookies.get(COOKIE_NAME)?.value;
+    if (cookieToken) {
+      return verifyAdminSessionToken(cookieToken);
+    }
+
+    return null;
   }
 
+  // Server components / cookie fallback
+  const cookieStore = await cookies();
+  const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) {
     return null;
   }
