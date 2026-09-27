@@ -26,8 +26,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
       );
     }
 
-    // Access control verification
-    const user = await getUserFromRequest(req);
+    // Access control verification with fresh DB lookup
+    const user = await getUserFromRequest(req, true);
     const access = canUserAccessApp(user, app);
     if (!access.allowed) {
       return NextResponse.json(

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const user = await getUserFromRequest(req);
+    const user = await getUserFromRequest(req, true);
     const access = canUserAccessApp(user, app);
     if (!access.allowed) {
       return NextResponse.json(

@@ -56,32 +56,51 @@ export async function verifyUserToken(token: string): Promise<UserTokenPayload |
 }
 
 /**
- * Extracts and verifies the authenticated user from a NextRequest
+ * Extracts and verifies the authenticated user from a NextRequest.
+ * When fetchFromDb is true, fetches the current user from MongoDB so that any role
+ * or permission changes applied in the admin panel take effect immediately.
  */
-export async function getUserFromRequest(req: NextRequest): Promise<UserTokenPayload | null> {
+export async function getUserFromRequest(
+  req: NextRequest,
+  fetchFromDb = false
+): Promise<UserTokenPayload | null> {
+  let token: string | undefined;
+
   // 1. Check Authorization Bearer header
   const authHeader = req.headers.get('authorization');
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7).trim();
-    const payload = await verifyUserToken(token);
-    if (payload) return payload;
+    token = authHeader.substring(7).trim();
+  } else if (req.nextUrl.searchParams.get('token')) {
+    token = req.nextUrl.searchParams.get('token')!;
+  } else if (req.cookies.get('novastore_user_token')?.value) {
+    token = req.cookies.get('novastore_user_token')?.value;
   }
 
-  // 2. Check query parameter ?token=...
-  const tokenParam = req.nextUrl.searchParams.get('token');
-  if (tokenParam) {
-    const payload = await verifyUserToken(tokenParam);
-    if (payload) return payload;
+  if (!token) return null;
+
+  const payload = await verifyUserToken(token);
+  if (!payload) return null;
+
+  if (fetchFromDb && payload.userId) {
+    try {
+      await connectToDatabase();
+      const freshUser = await User.findById(payload.userId);
+      if (freshUser) {
+        return {
+          userId: freshUser._id.toString(),
+          email: freshUser.email,
+          name: freshUser.name,
+          role: freshUser.role,
+          dateOfBirth: new Date(freshUser.dateOfBirth).toISOString(),
+          customPermissions: freshUser.customPermissions || [],
+        };
+      }
+    } catch (e) {
+      console.warn('Error fetching fresh user from DB in getUserFromRequest:', e);
+    }
   }
 
-  // 3. Check cookie
-  const cookie = req.cookies.get('novastore_user_token');
-  if (cookie?.value) {
-    const payload = await verifyUserToken(cookie.value);
-    if (payload) return payload;
-  }
-
-  return null;
+  return payload;
 }
 
 /**
@@ -105,7 +124,7 @@ export function canUserAccessApp(
     requiredPermissions?: string[];
   }
 ): { allowed: boolean; reason?: string } {
-  const level = app.accessLevel || 'public';
+  const level = (app.accessLevel || 'public').toLowerCase();
 
   // 1. Public apps can be downloaded by everyone
   if (level === 'public') {
@@ -120,7 +139,17 @@ export function canUserAccessApp(
     };
   }
 
-  // 3. Age-restricted (18+)
+  // Admin users always have unrestricted access
+  if (user.role && user.role.toLowerCase() === 'admin') {
+    return { allowed: true };
+  }
+
+  // 3. Registered access level: any logged in user
+  if (level === 'registered') {
+    return { allowed: true };
+  }
+
+  // 4. Age-restricted (18+)
   if (level === 'age_18') {
     const age = calculateAge(user.dateOfBirth);
     if (age < 18) {
@@ -132,23 +161,20 @@ export function canUserAccessApp(
     return { allowed: true };
   }
 
-  // 4. Restricted access (VIP, tester, specific roles or custom permissions)
+  // 5. Restricted access (VIP, tester, developer, specific roles or custom permissions)
   if (level === 'restricted') {
-    if (user.role === 'admin') {
-      return { allowed: true };
-    }
+    const userRole = (user.role || '').toLowerCase().trim();
 
     const hasRole =
-      app.requiredRoles &&
+      Array.isArray(app.requiredRoles) &&
       app.requiredRoles.length > 0 &&
-      app.requiredRoles.includes(user.role);
+      app.requiredRoles.some((r) => r.toLowerCase().trim() === userRole);
 
+    const userPerms = (user.customPermissions || []).map((p) => p.toLowerCase().trim());
     const hasPermission =
-      app.requiredPermissions &&
+      Array.isArray(app.requiredPermissions) &&
       app.requiredPermissions.length > 0 &&
-      app.requiredPermissions.some((perm) =>
-        (user.customPermissions || []).includes(perm)
-      );
+      app.requiredPermissions.some((perm) => userPerms.includes(perm.toLowerCase().trim()));
 
     if (hasRole || hasPermission) {
       return { allowed: true };

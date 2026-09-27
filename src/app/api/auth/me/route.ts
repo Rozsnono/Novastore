@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserFromRequest } from '@/lib/userAuth';
+import { getUserFromRequest, signUserToken } from '@/lib/userAuth';
 import { connectToDatabase } from '@/lib/db';
 import User from '@/lib/models/User';
 
@@ -18,8 +18,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Felhasználó nem található' }, { status: 404 });
     }
 
+    const freshToken = await signUserToken(user);
+
     return NextResponse.json({
       success: true,
+      token: freshToken,
       user: {
         id: user._id.toString(),
         name: user.name,
