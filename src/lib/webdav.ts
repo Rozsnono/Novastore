@@ -1,18 +1,19 @@
 import { createClient, WebDAVClient, FileStat } from 'webdav';
 import { Readable } from 'stream';
+import fs from 'fs';
 
-const WEBDAV_URL = process.env.WEBDAV_URL || 'http://localhost:8080/webdav';
-const WEBDAV_USERNAME = process.env.WEBDAV_USERNAME || 'admin';
-const WEBDAV_PASSWORD = process.env.WEBDAV_PASSWORD || 'password';
+import { requireEnv } from './env';
+
 const ROOT_PATH = (process.env.WEBDAV_ROOT_PATH || '/novastore/apps').replace(/\/$/, '');
 
 let clientInstance: WebDAVClient | null = null;
 
 export function getWebDAVClient(): WebDAVClient {
   if (!clientInstance) {
-    clientInstance = createClient(WEBDAV_URL, {
-      username: WEBDAV_USERNAME,
-      password: WEBDAV_PASSWORD,
+    // Lazy olvasás, kódba égetett tartalék hitelesítő adatok nélkül.
+    clientInstance = createClient(requireEnv('WEBDAV_URL'), {
+      username: requireEnv('WEBDAV_USERNAME'),
+      password: requireEnv('WEBDAV_PASSWORD'),
     });
   }
   return clientInstance;
@@ -145,9 +146,9 @@ export async function enforceMaxApkRetention(
     return { deleted: [], remaining: [] };
   }
 
-  // Filter only .apk files
+  // Csak a ténylegesen .apk kiterjesztésű fájlokat kezeljük (más fájlt soha nem törlünk)
   const apkFiles = existingItems.filter(
-    (item) => item.type === 'file' || item.basename.toLowerCase().endsWith('.apk')
+    (item) => item.type === 'file' && item.basename.toLowerCase().endsWith('.apk')
   );
 
   if (apkFiles.length <= maxFiles) {
@@ -157,17 +158,19 @@ export async function enforceMaxApkRetention(
     };
   }
 
-  // Sort descending by last modified time (newest first)
+  // Rendezés: elsődlegesen a fájlnévből kinyert verziókód (legújabb elöl), így egy régebbi
+  // verzió újrafeltöltése nem törölheti a legfrissebbet; egyezésnél a módosítási idő dönt.
+  const versionOf = (name: string): number => {
+    const m = name.match(/v(\d+)\.apk$/i);
+    return m ? parseInt(m[1], 10) : -1;
+  };
   apkFiles.sort((a, b) => {
+    const vA = versionOf(a.basename);
+    const vB = versionOf(b.basename);
+    if (vB !== vA) return vB - vA;
     const timeA = a.lastmod ? new Date(a.lastmod).getTime() : 0;
     const timeB = b.lastmod ? new Date(b.lastmod).getTime() : 0;
-    if (timeB !== timeA) {
-      return timeB - timeA;
-    }
-    // Secondary fallback: extract version number if possible
-    const vA = parseInt((a.basename.match(/\d+/) || ['0'])[0], 10);
-    const vB = parseInt((b.basename.match(/\d+/) || ['0'])[0], 10);
-    return vB - vA;
+    return timeB - timeA;
   });
 
   const toKeep = apkFiles.slice(0, maxFiles);
@@ -223,3 +226,41 @@ export async function manageApkVersioning(
   };
 }
 
+
+/**
+ * Streaming változat: a szelet-fájlokat egymás után, memóriába összefűzés nélkül tölti fel
+ * a NAS-ra (a teljes APK helyett egyszerre csak egy darab van a memóriában).
+ * Az `manageApkVersioning` puffer-alapú változata a kompatibilitás miatt megmarad.
+ */
+export async function manageApkVersioningFromChunks(
+  packageName: string,
+  newVersionCode: number,
+  chunkFilePaths: string[]
+): Promise<{ finalPath: string; sizeBytes: number }> {
+  const apkDir = `${getAppStoragePath(packageName)}/apk`;
+  await ensureDirectoryExists(apkDir);
+
+  const sizeBytes = chunkFilePaths.reduce((sum, p) => sum + fs.statSync(p).size, 0);
+  const newApkPath = `${apkDir}/app-v${newVersionCode}.apk`;
+
+  async function* readChunks() {
+    for (const chunkPath of chunkFilePaths) {
+      for await (const part of fs.createReadStream(chunkPath)) {
+        yield part;
+      }
+    }
+  }
+
+  await getWebDAVClient().putFileContents(newApkPath, Readable.from(readChunks()) as any, {
+    overwrite: true,
+    contentLength: sizeBytes,
+  });
+
+  try {
+    await enforceMaxApkRetention(packageName, 3);
+  } catch (retentionErr) {
+    console.warn(`[NAS Retention] Error enforcing retention for ${packageName}:`, retentionErr);
+  }
+
+  return { finalPath: newApkPath, sizeBytes };
+}

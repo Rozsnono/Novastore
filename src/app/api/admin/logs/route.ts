@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
 import AppLog from '@/lib/models/AppLog';
+import { escapeRegExp, parseBoundedInt } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,8 +17,8 @@ export async function GET(req: NextRequest) {
     const level = searchParams.get('level');
     const source = searchParams.get('source');
     const search = searchParams.get('search');
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 200);
-    const page = Math.max(parseInt(searchParams.get('page') || '1', 10), 1);
+    const limit = parseBoundedInt(searchParams.get('limit'), 50, 1, 200);
+    const page = parseBoundedInt(searchParams.get('page'), 1, 1, 100000);
 
     await connectToDatabase();
 
@@ -29,9 +30,10 @@ export async function GET(req: NextRequest) {
       query.source = source;
     }
     if (search && search.trim()) {
+      const pattern = escapeRegExp(search.trim());
       query.$or = [
-        { message: { $regex: search.trim(), $options: 'i' } },
-        { stack: { $regex: search.trim(), $options: 'i' } },
+        { message: { $regex: pattern, $options: 'i' } },
+        { stack: { $regex: pattern, $options: 'i' } },
       ];
     }
 

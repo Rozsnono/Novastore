@@ -12,7 +12,8 @@ interface ChunkedUploaderProps {
 
 // 20MB chunk size: maximizes upload throughput directly to Synology NAS (same as NewFileSharer)
 const CHUNK_SIZE = 20 * 1024 * 1024;
-const UPLOAD_API_KEY = process.env.NEXT_PUBLIC_UPLOAD_API_KEY || 'test-secret-key-12345';
+// Nincs kódba égetett tartalék kulcs. FIGYELEM: a NEXT_PUBLIC_ változó a böngészőbe kerül (lásd AGENTS.md, ismert korlátozások).
+const UPLOAD_API_KEY = process.env.NEXT_PUBLIC_UPLOAD_API_KEY || '';
 
 function resolveUploadApiUrl(): string {
   let configured = (process.env.NEXT_PUBLIC_UPLOAD_API_URL || '').trim();
@@ -86,6 +87,11 @@ export default function ChunkedUploader({
     const numericVersion = Math.max(1, parseInt(String(versionCode), 10) || 1);
     if (!versionCode || Number(versionCode) < 1) {
       setError('Kérlek adj meg érvényes Verziókódot a feltöltés előtt.');
+      return;
+    }
+
+    if (!UPLOAD_API_KEY) {
+      setError('A feltöltés nincs konfigurálva (hiányzó NEXT_PUBLIC_UPLOAD_API_KEY). Értesítsd a rendszergazdát.');
       return;
     }
 

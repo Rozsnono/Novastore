@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { connectToDatabase } from '@/lib/db';
 import Review from '@/lib/models/Review';
 import AppItem from '@/lib/models/AppItem';
-import { getUserFromRequest } from '@/lib/userAuth';
+import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   } catch (error: any) {
     console.error(`Error fetching reviews for ${cleanPkg}:`, error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch reviews' },
+      { error: 'Failed to fetch reviews' },
       { status: 500 }
     );
   }
@@ -92,7 +92,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
   const cleanPkg = packageName.toLowerCase().trim();
 
   try {
-    const user = await getUserFromRequest(req);
+    // Friss DB-lekérdezéssel: törölt felhasználó nem értékelhet
+    const user = await getUserFromRequest(req, true);
     if (!user) {
       return NextResponse.json(
         { error: 'Értékelés írásához bejelentkezés szükséges' },
@@ -102,16 +103,23 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
     const { rating, comment } = await req.json();
 
-    if (!rating || rating < 1 || rating > 5) {
+    if (typeof rating !== 'number' || !Number.isFinite(rating) || rating < 1 || rating > 5) {
       return NextResponse.json(
         { error: 'Kérlek adj meg 1 és 5 csillag közötti értékelést' },
         { status: 400 }
       );
     }
 
-    if (!comment || !comment.trim()) {
+    if (typeof comment !== 'string' || !comment.trim()) {
       return NextResponse.json(
         { error: 'Kérlek írj egy rövid szöveges véleményt is' },
+        { status: 400 }
+      );
+    }
+
+    if (comment.trim().length > 1000) {
+      return NextResponse.json(
+        { error: 'A vélemény legfeljebb 1000 karakter hosszú lehet' },
         { status: 400 }
       );
     }
@@ -127,6 +135,15 @@ export async function POST(req: NextRequest, context: RouteContext) {
       );
     }
 
+    // Zárt alkalmazást csak az értékelhet, aki le is tölthetné
+    const access = canUserAccessApp(user, app);
+    if (!access.allowed) {
+      return NextResponse.json(
+        { error: access.reason || 'Hozzáférés megtagadva ehhez az alkalmazáshoz' },
+        { status: 403 }
+      );
+    }
+
     // Upsert review (1 review per user per app)
     const updatedReview = await Review.findOneAndUpdate(
       {
@@ -139,10 +156,11 @@ export async function POST(req: NextRequest, context: RouteContext) {
         userName: user.name,
         rating: Math.round(rating),
         comment: comment.trim(),
-        isVerifiedDownload: true,
+        // A letöltés nincs követve felhasználónként, ezért nem állíthatjuk "ellenőrzöttnek".
+        isVerifiedDownload: false,
         updatedAt: new Date(),
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true }
     );
 
     // Update aggregated rating on AppItem
@@ -155,7 +173,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   } catch (error: any) {
     console.error(`Error saving review for ${cleanPkg}:`, error);
     return NextResponse.json(
-      { error: error.message || 'Hiba történt az értékelés mentésekor' },
+      { error: 'Hiba történt az értékelés mentésekor' },
       { status: 500 }
     );
   }

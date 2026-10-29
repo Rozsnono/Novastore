@@ -1,11 +1,13 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 import { NextRequest } from 'next/server';
+import { timingSafeEqual } from 'crypto';
+import { requireEnv } from './env';
 
-const ADMIN_MASTER_KEY = process.env.ADMIN_MASTER_KEY || 'NovaStoreSecret2026!';
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'super-secret-novastore-jwt-signing-key-32chars!'
-);
+// A titkok lazy módon, első használatkor töltődnek be: hiányzó konfiguráció esetén
+// érthető hiba keletkezik (nincs kódba égetett tartalékérték), a build pedig nem törik el.
+const getAdminMasterKey = () => requireEnv('ADMIN_MASTER_KEY');
+const getJwtSecret = () => new TextEncoder().encode(requireEnv('JWT_SECRET'));
 const COOKIE_NAME = 'novastore_admin_session';
 
 export interface AdminSession {
@@ -18,7 +20,16 @@ export interface AdminSession {
  * Validates the provided masterkey password
  */
 export function verifyMasterKey(password: string): boolean {
-  return password === ADMIN_MASTER_KEY;
+  if (typeof password !== 'string') return false;
+  const a = Buffer.from(password);
+  const b = Buffer.from(getAdminMasterKey());
+  // Időzítés-biztos összehasonlítás (azonos hosszra hozva, hogy ne szivárogjon a hossz)
+  const len = Math.max(a.length, b.length);
+  const pa = Buffer.alloc(len);
+  const pb = Buffer.alloc(len);
+  a.copy(pa);
+  b.copy(pb);
+  return timingSafeEqual(pa, pb) && a.length === b.length;
 }
 
 /**
@@ -29,7 +40,7 @@ export async function createAdminSessionToken(): Promise<string> {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 /**
@@ -37,7 +48,7 @@ export async function createAdminSessionToken(): Promise<string> {
  */
 export async function verifyAdminSessionToken(token: string): Promise<AdminSession | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     if (payload && payload.role === 'admin' && payload.authenticated === true) {
       return {
         authenticated: true,

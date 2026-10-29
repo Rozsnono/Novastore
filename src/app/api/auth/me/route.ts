@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Hiba történt a profil lekérésekor' },
+      { error: 'Hiba történt a profil lekérésekor' },
       { status: 500 }
     );
   }

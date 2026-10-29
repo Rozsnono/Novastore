@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
 import User from '@/lib/models/User';
+import { escapeRegExp } from '@/lib/validation';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,9 +21,10 @@ export async function GET(req: NextRequest) {
 
     const query: any = {};
     if (search.trim()) {
+      const pattern = escapeRegExp(search.trim());
       query.$or = [
-        { name: { $regex: search.trim(), $options: 'i' } },
-        { email: { $regex: search.trim(), $options: 'i' } },
+        { name: { $regex: pattern, $options: 'i' } },
+        { email: { $regex: pattern, $options: 'i' } },
       ];
     }
     if (role) {

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
-import { manageApkVersioning } from '@/lib/webdav';
+import { manageApkVersioningFromChunks } from '@/lib/webdav';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+
+// Az uploadId a fájlrendszer-útvonal része: csak biztonságos karakterek engedélyezettek.
+const SAFE_UPLOAD_ID = /^[A-Za-z0-9_-]{1,128}$/;
 
 export const dynamic = 'force-dynamic';
 
@@ -28,6 +31,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (typeof uploadId !== 'string' || !SAFE_UPLOAD_ID.test(uploadId)) {
+      return NextResponse.json({ error: 'Invalid uploadId' }, { status: 400 });
+    }
+
+    // Ezek a értékek a NAS-útvonalba és a ciklusba kerülnek, ezért szigorúan ellenőrizzük őket
+    const versionCodeNum = Number(versionCode);
+    if (!Number.isInteger(versionCodeNum) || versionCodeNum < 1) {
+      return NextResponse.json({ error: 'Invalid versionCode' }, { status: 400 });
+    }
+    const totalChunksNum = Number(totalChunks);
+    if (!Number.isInteger(totalChunksNum) || totalChunksNum < 1 || totalChunksNum > 5000) {
+      return NextResponse.json({ error: 'Invalid totalChunks' }, { status: 400 });
+    }
+    if (typeof packageName !== 'string') {
+      return NextResponse.json({ error: 'Invalid packageName' }, { status: 400 });
+    }
+
     const stagingDir = path.join(os.tmpdir(), 'novastore_uploads', uploadId);
 
     if (!fs.existsSync(stagingDir)) {
@@ -38,26 +58,24 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify all chunks exist
-    const chunkBuffers: Buffer[] = [];
-    for (let i = 0; i < totalChunks; i++) {
+    const chunkPaths: string[] = [];
+    for (let i = 0; i < totalChunksNum; i++) {
       const chunkFilePath = path.join(stagingDir, `chunk_${i}`);
       if (!fs.existsSync(chunkFilePath)) {
         return NextResponse.json(
-          { error: `Missing chunk ${i} of ${totalChunks}` },
+          { error: `Missing chunk ${i} of ${totalChunksNum}` },
           { status: 400 }
         );
       }
-      chunkBuffers.push(fs.readFileSync(chunkFilePath));
+      chunkPaths.push(chunkFilePath);
     }
 
-    // Concatenate all chunks
-    const completeApkBuffer = Buffer.concat(chunkBuffers);
 
     // Upload & version manage on WebDAV NAS
-    const { finalPath, sizeBytes } = await manageApkVersioning(
-      packageName,
-      versionCode,
-      completeApkBuffer
+    const { finalPath, sizeBytes } = await manageApkVersioningFromChunks(
+      packageName.toLowerCase().trim(),
+      versionCodeNum,
+      chunkPaths
     );
 
     // Clean up temporary staging directory

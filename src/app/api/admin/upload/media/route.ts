@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const type = formData.get('type') as string; // 'icon' | 'screenshot'
-    const packageName = formData.get('packageName') as string;
+    // Kisbetűsítés: a katalógus is kisbetűs csomagnevet használ, így a NAS-útvonal és a cache-kulcs egyezik
+    const packageName = ((formData.get('packageName') as string) || '').toLowerCase().trim();
     const file = formData.get('file') as File | null;
     const index = formData.get('index') as string | null;
 
@@ -23,6 +24,16 @@ export async function POST(req: NextRequest) {
         { error: 'Missing required media upload fields' },
         { status: 400 }
       );
+    }
+
+    // A képernyőkép-index a NAS-útvonal része: csak számjegy lehet
+    if (index !== null && !/^\d{1,3}$/.test(index)) {
+      return NextResponse.json({ error: 'Invalid screenshot index' }, { status: 400 });
+    }
+
+    // Méretkorlát (10 MB) a memóriába töltés előtt
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json({ error: 'A fájl túl nagy (max. 10 MB)' }, { status: 413 });
     }
 
     const appDir = getAppStoragePath(packageName);

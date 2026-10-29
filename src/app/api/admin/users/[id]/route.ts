@@ -5,6 +5,8 @@ import User from '@/lib/models/User';
 
 export const dynamic = 'force-dynamic';
 
+const ALLOWED_ROLES = ['user', 'vip', 'tester', 'developer', 'admin'];
+
 interface RouteContext {
   params: Promise<{ id: string }>;
 }
@@ -24,14 +26,18 @@ export async function PUT(req: NextRequest, context: RouteContext) {
 
     const updateFields: any = {};
     if (role) {
+      if (!ALLOWED_ROLES.includes(role)) {
+        return NextResponse.json({ error: 'Érvénytelen szerepkör' }, { status: 400 });
+      }
       updateFields.role = role;
     }
     if (Array.isArray(customPermissions)) {
-      updateFields.customPermissions = customPermissions;
+      updateFields.customPermissions = customPermissions.map(String);
     }
 
     const updatedUser = await User.findByIdAndUpdate(id, updateFields, {
       new: true,
+      runValidators: true,
     }).select('-passwordHash');
 
     if (!updatedUser) {

@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
       screenshots,
       apkWebDavPath,
       sizeBytes,
+      accessLevel,
+      requiredRoles,
+      requiredPermissions,
     } = body;
 
     if (
@@ -57,6 +60,25 @@ export async function POST(req: NextRequest) {
         { error: 'Please provide all required application fields' },
         { status: 400 }
       );
+    }
+
+    if (
+      typeof title !== 'string' ||
+      typeof packageName !== 'string' ||
+      typeof versionName !== 'string' ||
+      typeof description !== 'string' ||
+      typeof iconUrl !== 'string' ||
+      typeof apkWebDavPath !== 'string'
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid field types in application payload' },
+        { status: 400 }
+      );
+    }
+
+    const allowedLevels = ['public', 'registered', 'restricted', 'age_18'];
+    if (accessLevel !== undefined && !allowedLevels.includes(accessLevel)) {
+      return NextResponse.json({ error: 'Invalid accessLevel' }, { status: 400 });
     }
 
     await connectToDatabase();
@@ -80,6 +102,12 @@ export async function POST(req: NextRequest) {
       screenshots: Array.isArray(screenshots) ? screenshots : [],
       apkWebDavPath,
       sizeBytes: Number(sizeBytes) || 0,
+      // Korábban ezek a mezők elvesztek, és minden új app publikus lett
+      accessLevel: accessLevel || 'public',
+      requiredRoles: Array.isArray(requiredRoles) ? requiredRoles.map(String) : [],
+      requiredPermissions: Array.isArray(requiredPermissions)
+        ? requiredPermissions.map(String)
+        : [],
       downloadCount: 0,
       isUpdated: false,
     });

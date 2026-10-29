@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMasterKey, createAdminSessionToken, COOKIE_NAME } from '@/lib/auth';
+import { checkRateLimit, getClientIp, resetRateLimit } from '@/lib/rateLimit';
 
 export async function POST(req: NextRequest) {
+  const rateKey = `admin-login:${getClientIp(req)}`;
+  if (!checkRateLimit(rateKey, 5, 900000)) {
+    return NextResponse.json(
+      { error: 'Túl sok sikertelen próbálkozás. Próbáld újra később.' },
+      { status: 429 }
+    );
+  }
+
   try {
     const { password } = await req.json();
 
-    if (!password || !verifyMasterKey(password)) {
+    if (typeof password !== 'string' || !password || !verifyMasterKey(password)) {
       return NextResponse.json(
         { error: 'Invalid masterkey password' },
         { status: 401 }
       );
     }
+
+    // Sikeres belépés: csak a hibás próbálkozások számítanak a limitbe
+    resetRateLimit(rateKey);
 
     const token = await createAdminSessionToken();
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
+import { checkRateLimit, getClientIp } from '@/lib/rateLimit';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,11 @@ interface RouteContext {
 
 export async function POST(req: NextRequest, context: RouteContext) {
   const { packageName } = await context.params;
+
+  // A számláló hitelesítés nélküli, ezért IP+app szerint korlátozzuk (egyszerű számláló-felfújás ellen)
+  if (!checkRateLimit(`dl-complete:${getClientIp(req)}:${packageName.toLowerCase()}`, 5, 3600000)) {
+    return NextResponse.json({ error: 'Túl sok kérés. Próbáld újra később.' }, { status: 429 });
+  }
 
   try {
     await connectToDatabase();
@@ -34,7 +40,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   } catch (error: any) {
     console.error(`Error incrementing download count for ${packageName}:`, error);
     return NextResponse.json(
-      { error: error.message || 'Failed to update download count' },
+      { error: 'Failed to update download count' },
       { status: 500 }
     );
   }

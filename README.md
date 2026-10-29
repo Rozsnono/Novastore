@@ -83,8 +83,8 @@ WEBDAV_PASSWORD=your_nas_secure_password
 WEBDAV_ROOT_PATH=/novastore/apps
 
 # Admin Dashboard Authentication
-ADMIN_MASTER_KEY=NovaStoreSecret2026!
-JWT_SECRET=your-secure-jwt-secret-key-32-chars-long
+ADMIN_MASTER_KEY=<erős-véletlen-jelszó-kötelező>
+JWT_SECRET=<legalább-32-karakteres-véletlen-érték>
 
 # Public App URL (used for proxied URLs)
 NEXT_PUBLIC_APP_URL=https://novastore.rozsnorbert.hu

@@ -11,11 +11,12 @@
  * Returns the base URL of the dedicated Synology Storage API.
  */
 export function getStorageApiUrl(): string {
-  let url =
-    process.env.UPLOAD_API_URL ||
-    process.env.NEXT_PUBLIC_UPLOAD_API_URL ||
-    'https://api.filesharer.rozsnorbert.hu:9443';
-  url = url.trim().replace(/\/+$/, '');
+  // Nincs kódba égetett tartalék URL: hiányzó konfigurációnál érthető hibát dobunk.
+  const configured = process.env.UPLOAD_API_URL || process.env.NEXT_PUBLIC_UPLOAD_API_URL;
+  if (!configured || !configured.trim()) {
+    throw new Error('Hiányzó konfiguráció: UPLOAD_API_URL nincs beállítva.');
+  }
+  let url = configured.trim().replace(/\/+$/, '');
   if (url.startsWith('http://') && url.includes('api.filesharer.rozsnorbert.hu')) {
     url = url.replace(/^http:\/\//, 'https://');
   }
@@ -26,11 +27,12 @@ export function getStorageApiUrl(): string {
  * Returns the secret API key for the dedicated Storage API.
  */
 export function getStorageApiKey(): string {
-  return (
-    process.env.UPLOAD_API_KEY ||
-    process.env.NEXT_PUBLIC_UPLOAD_API_KEY ||
-    'test-secret-key-12345'
-  );
+  // Nincs kódba égetett tartalék kulcs: hiányzó konfigurációnál érthető hibát dobunk.
+  const key = process.env.UPLOAD_API_KEY || process.env.NEXT_PUBLIC_UPLOAD_API_KEY;
+  if (!key) {
+    throw new Error('Hiányzó konfiguráció: UPLOAD_API_KEY nincs beállítva.');
+  }
+  return key;
 }
 
 export interface DirectDownloadOptions {

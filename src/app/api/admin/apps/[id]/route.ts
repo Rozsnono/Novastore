@@ -4,6 +4,7 @@ import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
 import { deleteWebDAVPath, getAppStoragePath, enforceMaxApkRetention } from '@/lib/webdav';
 import mediaCache from '@/lib/cache';
+import Review from '@/lib/models/Review';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,10 +57,34 @@ export async function PUT(req: NextRequest, context: RouteContext) {
     const isVersionChange =
       newVersionCode !== undefined && newVersionCode > existingApp.versionCode;
 
+    // Mass assignment ellen: csak a szerkeszthető mezőket engedjük át
+    // (packageName, downloadCount, értékelési statisztika stb. nem módosítható).
+    const EDITABLE_FIELDS = [
+      'title',
+      'versionName',
+      'description',
+      'iconUrl',
+      'screenshots',
+      'apkWebDavPath',
+      'sizeBytes',
+      'isUpdated',
+      'accessLevel',
+      'requiredRoles',
+      'requiredPermissions',
+    ];
+    const editable: Record<string, unknown> = {};
+    for (const key of EDITABLE_FIELDS) {
+      if (body && body[key] !== undefined) editable[key] = body[key];
+    }
+
+    if (newVersionCode !== undefined && !Number.isFinite(newVersionCode)) {
+      return NextResponse.json({ error: 'Invalid versionCode' }, { status: 400 });
+    }
+
     const updated = await AppItem.findByIdAndUpdate(
       id,
       {
-        ...body,
+        ...editable,
         ...(newVersionCode !== undefined ? { versionCode: newVersionCode } : {}),
         ...(isVersionChange ? { isUpdated: true } : {}),
       },
@@ -95,6 +120,9 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     if (!app) {
       return NextResponse.json({ error: 'App not found' }, { status: 404 });
     }
+
+    // Az alkalmazás értékelései sem maradhatnak árván
+    await Review.deleteMany({ packageName: app.packageName });
 
     // Purge app folder from WebDAV NAS
     const appNasPath = getAppStoragePath(app.packageName);

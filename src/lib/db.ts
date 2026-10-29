@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/novastore';
+import { requireEnv } from './env';
 
 interface MongooseCache {
   conn: typeof mongoose | null;
@@ -28,7 +28,8 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
       bufferCommands: false,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongooseInstance) => {
+    // Lazy olvasás: nincs kódba égetett tartalék URI, hiány esetén érthető hiba keletkezik.
+    cached.promise = mongoose.connect(requireEnv('MONGODB_URI'), opts).then((mongooseInstance) => {
       return mongooseInstance;
     });
   }

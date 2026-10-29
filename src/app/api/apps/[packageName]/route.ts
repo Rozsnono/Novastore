@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
+import { getUserFromRequest } from '@/lib/userAuth';
+import { redactAppForUser } from '@/lib/appVisibility';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,10 +24,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
       );
     }
 
-    return NextResponse.json({ success: true, data: app });
+    const user = await getUserFromRequest(req);
+    return NextResponse.json({ success: true, data: redactAppForUser(app, user) });
   } catch (error: any) {
+    console.error(`Error fetching application details for ${packageName}:`, error);
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch application details' },
+      { error: 'Failed to fetch application details' },
       { status: 500 }
     );
   }

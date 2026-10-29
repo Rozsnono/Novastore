@@ -3,9 +3,10 @@ import { NextRequest } from 'next/server';
 import { IUser, IAppItem, AppAccessLevel } from '@/types';
 import User from './models/User';
 import { connectToDatabase } from './db';
+import { requireEnv } from './env';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'novastore-super-secret-default-jwt-key-2026';
-const secretKey = new TextEncoder().encode(JWT_SECRET);
+// Lazy betöltés: nincs kódba égetett tartalék JWT secret.
+const getSecretKey = () => new TextEncoder().encode(requireEnv('JWT_SECRET'));
 
 export interface UserTokenPayload {
   userId: string;
@@ -40,7 +41,7 @@ export async function signUserToken(user: {
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('90d') // 90 days validity
-    .sign(secretKey);
+    .sign(getSecretKey());
 }
 
 /**
@@ -48,7 +49,7 @@ export async function signUserToken(user: {
  */
 export async function verifyUserToken(token: string): Promise<UserTokenPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, secretKey);
+    const { payload } = await jwtVerify(token, getSecretKey());
     return payload as unknown as UserTokenPayload;
   } catch (err) {
     return null;
@@ -85,16 +86,16 @@ export async function getUserFromRequest(
     try {
       await connectToDatabase();
       const freshUser = await User.findById(payload.userId);
-      if (freshUser) {
-        return {
-          userId: freshUser._id.toString(),
-          email: freshUser.email,
-          name: freshUser.name,
-          role: freshUser.role,
-          dateOfBirth: new Date(freshUser.dateOfBirth).toISOString(),
-          customPermissions: freshUser.customPermissions || [],
-        };
-      }
+      // Törölt felhasználó tokenje nem érvényes (a token 90 napig él, a fiók viszont megszűnhetett).
+      if (!freshUser) return null;
+      return {
+        userId: freshUser._id.toString(),
+        email: freshUser.email,
+        name: freshUser.name,
+        role: freshUser.role,
+        dateOfBirth: new Date(freshUser.dateOfBirth).toISOString(),
+        customPermissions: freshUser.customPermissions || [],
+      };
     } catch (e) {
       console.warn('Error fetching fresh user from DB in getUserFromRequest:', e);
     }
@@ -108,9 +109,16 @@ export async function getUserFromRequest(
  */
 export function calculateAge(dobInput: Date | string): number {
   const dob = new Date(dobInput);
-  const diffMs = Date.now() - dob.getTime();
-  const ageDt = new Date(diffMs);
-  return Math.abs(ageDt.getUTCFullYear() - 1970);
+  if (isNaN(dob.getTime())) return 0;
+  const now = new Date();
+  let age = now.getUTCFullYear() - dob.getUTCFullYear();
+  const monthDiff = now.getUTCMonth() - dob.getUTCMonth();
+  // Ha az idei születésnap még nem járt le, eggyel kevesebb az életkor.
+  if (monthDiff < 0 || (monthDiff === 0 && now.getUTCDate() < dob.getUTCDate())) {
+    age -= 1;
+  }
+  // Jövőbeli születési dátum nem adhat pozitív életkort.
+  return Math.max(age, 0);
 }
 
 /**

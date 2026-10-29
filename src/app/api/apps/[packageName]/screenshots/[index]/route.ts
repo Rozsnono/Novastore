@@ -10,6 +10,11 @@ interface RouteContext {
 
 export async function GET(req: NextRequest, context: RouteContext) {
   const { packageName, index } = await context.params;
+
+  // Az index a NAS-útvonal része: csak számjegyek engedélyezettek
+  if (!/^\d{1,3}$/.test(index)) {
+    return NextResponse.json({ error: 'Invalid screenshot index' }, { status: 400 });
+  }
   const cacheKey = `screenshot_${packageName}_${index}`;
 
   // 1. Check in-memory cache

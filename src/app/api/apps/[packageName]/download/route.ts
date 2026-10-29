@@ -36,6 +36,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
       );
     }
 
+    // Content-Disposition fejlécbe csak biztonságos karakterek kerülhetnek
+    const safeFileBase = packageName.replace(/[^a-zA-Z0-9._-]/g, '_');
+
     const forceStream = req.nextUrl.searchParams.get('stream') === 'true';
 
     // Direct high-performance redirect to dedicated NASiS3 download service (NewFileSharer pattern)
@@ -64,9 +67,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
       const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
       if (match) {
         const start = parseInt(match[1], 10);
-        const end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
+        let end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
 
-        if (start >= totalSize || end >= totalSize || start > end) {
+        // RFC 7233: a fájl végén túli végpontot levágjuk, nem utasítjuk el
+        end = Math.min(end, totalSize - 1);
+
+        if (start >= totalSize || start > end) {
           return new NextResponse(null, {
             status: 416,
             headers: {
@@ -87,7 +93,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
             'Accept-Ranges': 'bytes',
             'Content-Length': chunkLength.toString(),
             'Cache-Control': 'no-cache',
-            'Content-Disposition': `attachment; filename="${packageName}-v${app.versionCode}.apk"`,
+            'Content-Disposition': `attachment; filename="${safeFileBase}-v${app.versionCode}.apk"`,
           },
         });
       }
@@ -101,7 +107,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       'Content-Type': 'application/vnd.android.package-archive',
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',
-      'Content-Disposition': `attachment; filename="${packageName}-v${app.versionCode}.apk"`,
+      'Content-Disposition': `attachment; filename="${safeFileBase}-v${app.versionCode}.apk"`,
     };
 
     if (totalSize > 0) {
@@ -115,7 +121,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   } catch (error: any) {
     console.error(`Error streaming APK download for ${packageName}:`, error);
     return NextResponse.json(
-      { error: error.message || 'Failed to download APK from storage' },
+      { error: 'Failed to download APK from storage' },
       { status: 500 }
     );
   }

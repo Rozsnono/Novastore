@@ -47,7 +47,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   } catch (error: any) {
     console.error(`Error resolving download URL for ${packageName}:`, error);
     return NextResponse.json(
-      { error: error.message || 'Failed to resolve download URL' },
+      { error: 'Failed to resolve download URL' },
       { status: 500 }
     );
   }
