@@ -4,7 +4,7 @@ import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
 import { getFileStreamFromWebDAV, getFileStatFromWebDAV } from '@/lib/webdav';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
-import { buildDirectDownloadUrl } from '@/lib/storageApi';
+import { buildDirectDownloadUrl, toWebDavRelativePath } from '@/lib/storageApi';
 
 export const dynamic = 'force-dynamic';
 
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     let totalSize = Number(app.sizeBytes) || 0;
     if (totalSize <= 0) {
       try {
-        const stat = await getFileStatFromWebDAV(app.apkWebDavPath);
+        const stat = await getFileStatFromWebDAV(toWebDavRelativePath(app.apkWebDavPath));
         totalSize = Number(stat.size) || 0;
       } catch (e) {
         console.warn(`Could not stat WebDAV file ${app.apkWebDavPath}:`, e);
@@ -82,7 +82,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
         }
 
         const chunkLength = end - start + 1;
-        const nodeStream = await getFileStreamFromWebDAV(app.apkWebDavPath, { start, end });
+        const nodeStream = await getFileStreamFromWebDAV(toWebDavRelativePath(app.apkWebDavPath), { start, end });
         const webStream = Readable.toWeb(nodeStream as Readable);
 
         return new NextResponse(webStream as any, {
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
 
     // Full file streaming download (Instant start, no RAM buffering)
-    const nodeStream = await getFileStreamFromWebDAV(app.apkWebDavPath);
+    const nodeStream = await getFileStreamFromWebDAV(toWebDavRelativePath(app.apkWebDavPath));
     const webStream = Readable.toWeb(nodeStream as Readable);
 
     const headers: Record<string, string> = {

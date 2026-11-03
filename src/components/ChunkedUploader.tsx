@@ -107,7 +107,10 @@ export default function ChunkedUploader({
     const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
     // Relatív útvonal: a szolgáltatás a saját feltöltési gyökere (WEBDAV_UPLOAD_DIR, pl. /EpochMedia)
     // alá teszi. Abszolút, a gyökéren kívüli útvonalat elutasít ("targetPath must be located inside...").
-    const targetPath = `novastore/apps/${sanitizedPackage}/apk`;
+    // A könyvtár a konfigurációból jön (mappához kötött kulcsnál a kulcs mappájához képest értendő),
+    // alapértelmezés: novastore/apps
+    const baseDir = (process.env.NEXT_PUBLIC_UPLOAD_TARGET_DIR || 'novastore/apps').replace(/^\/+|\/+$/g, '');
+    const targetPath = `${baseDir}/${sanitizedPackage}/apk`;
     const targetFilename = `app-v${numericVersion}.apk`;
     let uploadApiUrl: string;
     try {

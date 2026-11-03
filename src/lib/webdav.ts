@@ -3,6 +3,7 @@ import { Readable } from 'stream';
 import fs from 'fs';
 
 import { requireEnv } from './env';
+import { toWebDavRelativePath } from './storageApi';
 
 const ROOT_PATH = (process.env.WEBDAV_ROOT_PATH || '/novastore/apps').replace(/\/$/, '');
 
@@ -201,7 +202,8 @@ export async function enforceMaxApkRetention(
 export function apkDirFromPath(apkWebDavPath?: string): string | undefined {
   if (!apkWebDavPath || !apkWebDavPath.includes('/')) return undefined;
   const dir = apkWebDavPath.substring(0, apkWebDavPath.lastIndexOf('/'));
-  return dir.startsWith('/') ? dir : `/${dir}`;
+  // A NAS szolgáltatás gyökeres útvonalát WebDAV-relatívvá alakítjuk (ezt használja a WebDAV-kliens)
+  return toWebDavRelativePath(dir);
 }
 
 /**

@@ -35,6 +35,33 @@ export function getStorageApiKey(): string {
   return key;
 }
 
+/**
+ * Az NAS szolgáltatás feltöltési gyökere (UPLOAD_STORAGE_ROOT, pl. "/EpochMedia"): a szolgáltatás
+ * a "/"-lel kezdődő útvonalat ABSZOLÚTNAK veszi, és a gyökéren kívülit elutasítja (403).
+ * A szerver WebDAV-kliense viszont a WebDAV-gyökérhez képesti útvonalakat tárol (pl. "/novastore/apps/..."),
+ * ezért a szolgáltatásnak küldött útvonalat a gyökérrel kiegészítjük. Ha a változó nincs beállítva,
+ * az útvonal változatlan marad (visszafelé kompatibilis).
+ */
+function getStorageRoot(): string {
+  return (process.env.UPLOAD_STORAGE_ROOT || '').trim().replace(/\/+$/, '');
+}
+
+/** WebDAV-relatív (vagy már gyökeres) útvonalból a szolgáltatás számára érvényes abszolút útvonal. */
+export function toStorageApiPath(p: string): string {
+  const clean = p.startsWith('/') ? p : `/${p}`;
+  const root = getStorageRoot();
+  if (!root || clean === root || clean.startsWith(`${root}/`)) return clean;
+  return `${root}${clean}`;
+}
+
+/** A szolgáltatás abszolút útvonalából (pl. "/EpochMedia/novastore/...") a WebDAV-relatív útvonal. */
+export function toWebDavRelativePath(p: string): string {
+  const clean = p.startsWith('/') ? p : `/${p}`;
+  const root = getStorageRoot();
+  if (root && clean.startsWith(`${root}/`)) return clean.substring(root.length);
+  return clean;
+}
+
 export interface DirectDownloadOptions {
   inline?: boolean;
   apiKey?: string;
@@ -54,8 +81,8 @@ export function buildDirectDownloadUrl(
   const baseUrl = getStorageApiUrl();
   const key = options.apiKey || getStorageApiKey();
 
-  // Normalize path
-  const cleanPath = webdavPath.startsWith('/') ? webdavPath : `/${webdavPath}`;
+  // Normalize path (a szolgáltatás feltöltési gyökerével kiegészítve)
+  const cleanPath = toStorageApiPath(webdavPath);
 
   const url = new URL('/download', baseUrl);
   url.searchParams.set('path', cleanPath);
