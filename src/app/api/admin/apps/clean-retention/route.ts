@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     }
 
     const limit = typeof maxFiles === 'number' && maxFiles > 0 ? maxFiles : 3;
-    const result = await enforceMaxApkRetention(packageName.trim(), limit);
+    const result = await enforceMaxApkRetention(packageName.trim().toLowerCase(), limit);
 
     return NextResponse.json({
       success: true,

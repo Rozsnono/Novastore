@@ -16,10 +16,12 @@ const CHUNK_SIZE = 20 * 1024 * 1024;
 const UPLOAD_API_KEY = process.env.NEXT_PUBLIC_UPLOAD_API_KEY || '';
 
 function resolveUploadApiUrl(): string {
-  let configured = (process.env.NEXT_PUBLIC_UPLOAD_API_URL || '').trim();
-  if (!configured) {
-    configured = 'https://api.filesharer.rozsnorbert.hu:9443';
+  // Nincs kódba égetett tartalék URL (konfigurációból jön); hiány esetén érthető hiba.
+  const configured0 = (process.env.NEXT_PUBLIC_UPLOAD_API_URL || '').trim();
+  if (!configured0) {
+    throw new Error('A feltöltés nincs konfigurálva (hiányzó NEXT_PUBLIC_UPLOAD_API_URL). Értesítsd a rendszergazdát.');
   }
+  let configured = configured0;
   if (typeof window !== 'undefined' && window.location.protocol === 'https:' && configured.startsWith('http://')) {
     configured = configured.replace(/^http:\/\//, 'https://');
   }
@@ -79,7 +81,9 @@ export default function ChunkedUploader({
       setError('Kérlek válassz ki egy APK fájlt.');
       return;
     }
-    const sanitizedPackage = packageName.trim();
+    // Ugyanaz a normalizálás, mint a szerveren (getAppStoragePath + kisbetűs csomagnév),
+    // különben a NAS-on és a szerver oldali retention/letöltés útvonala eltérhet.
+    const sanitizedPackage = packageName.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_');
     if (!sanitizedPackage) {
       setError('Kérlek add meg a Csomagnevet (Package Name) a feltöltés előtt.');
       return;
@@ -103,7 +107,14 @@ export default function ChunkedUploader({
     const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
     const targetPath = `/novastore/apps/${sanitizedPackage}/apk`;
     const targetFilename = `app-v${numericVersion}.apk`;
-    const uploadApiUrl = resolveUploadApiUrl();
+    let uploadApiUrl: string;
+    try {
+      uploadApiUrl = resolveUploadApiUrl();
+    } catch (cfgErr: any) {
+      setUploading(false);
+      setError(cfgErr.message);
+      return;
+    }
 
     let remoteUploadId: string | null = null;
     const startTime = Date.now();
@@ -238,7 +249,7 @@ export default function ChunkedUploader({
       fetch('/api/admin/apps/clean-retention', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packageName, maxFiles: 3 }),
+        body: JSON.stringify({ packageName: sanitizedPackage, maxFiles: 3 }),
       }).catch((cleanErr) => {
         console.warn('Retention cleanup call failed:', cleanErr);
       });
@@ -250,7 +261,8 @@ export default function ChunkedUploader({
 
       onUploadSuccess({
         apkWebDavPath: finalDestination,
-        sizeBytes: finishData.size || file.size,
+        // A szolgáltatás a méretet `fileSize` néven adja vissza (a régi `size` mező nem létezik)
+        sizeBytes: finishData.fileSize || finishData.size || file.size,
       });
     } catch (err: any) {
       console.error('NAS upload failed:', err);
