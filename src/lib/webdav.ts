@@ -129,11 +129,13 @@ export async function deleteWebDAVPath(remotePath: string): Promise<void> {
  */
 export async function enforceMaxApkRetention(
   packageName: string,
-  maxFiles: number = 3
+  maxFiles: number = 3,
+  apkDirOverride?: string
 ): Promise<{ deleted: string[]; remaining: string[] }> {
   const client = getWebDAVClient();
-  const appDir = getAppStoragePath(packageName);
-  const apkDir = `${appDir}/apk`;
+  // Ha ismert a tárolt APK útvonala (a NAS szolgáltatás gyökerével együtt), annak mappáját használjuk;
+  // különben az alapértelmezett WEBDAV_ROOT_PATH alatti mappát.
+  const apkDir = apkDirOverride || `${getAppStoragePath(packageName)}/apk`;
 
   let existingItems: FileStat[] = [];
   try {
@@ -191,6 +193,15 @@ export async function enforceMaxApkRetention(
     deleted,
     remaining: toKeep.map((f) => f.filename),
   };
+}
+
+/**
+ * Egy tárolt APK-útvonalból (pl. /EpochMedia/novastore/apps/pkg/apk/app-v3.apk) a mappa útvonala.
+ */
+export function apkDirFromPath(apkWebDavPath?: string): string | undefined {
+  if (!apkWebDavPath || !apkWebDavPath.includes('/')) return undefined;
+  const dir = apkWebDavPath.substring(0, apkWebDavPath.lastIndexOf('/'));
+  return dir.startsWith('/') ? dir : `/${dir}`;
 }
 
 /**

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
-import { enforceMaxApkRetention } from '@/lib/webdav';
+import { enforceMaxApkRetention, apkDirFromPath } from '@/lib/webdav';
+import { connectToDatabase } from '@/lib/db';
+import AppItem from '@/lib/models/AppItem';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +23,11 @@ export async function POST(req: NextRequest) {
     }
 
     const limit = typeof maxFiles === 'number' && maxFiles > 0 ? maxFiles : 3;
-    const result = await enforceMaxApkRetention(packageName.trim().toLowerCase(), limit);
+    const cleanPkg = packageName.trim().toLowerCase();
+    // A tárolt APK útvonalából határozzuk meg a mappát (ha az app már létezik)
+    await connectToDatabase();
+    const app = await AppItem.findOne({ packageName: cleanPkg });
+    const result = await enforceMaxApkRetention(cleanPkg, limit, apkDirFromPath(app?.apkWebDavPath));
 
     return NextResponse.json({
       success: true,

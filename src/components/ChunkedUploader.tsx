@@ -105,7 +105,9 @@ export default function ChunkedUploader({
     setProgress(0);
 
     const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
-    const targetPath = `/novastore/apps/${sanitizedPackage}/apk`;
+    // Relatív útvonal: a szolgáltatás a saját feltöltési gyökere (WEBDAV_UPLOAD_DIR, pl. /EpochMedia)
+    // alá teszi. Abszolút, a gyökéren kívüli útvonalat elutasít ("targetPath must be located inside...").
+    const targetPath = `novastore/apps/${sanitizedPackage}/apk`;
     const targetFilename = `app-v${numericVersion}.apk`;
     let uploadApiUrl: string;
     try {
@@ -243,7 +245,12 @@ export default function ChunkedUploader({
       }
 
       const finishData = await finishResponse.json();
-      const finalDestination = finishData.destination || `${targetPath}/${targetFilename}`;
+      // A tényleges (gyökérrel kiegészített) útvonalat a szolgáltatás adja vissza; találgatni nem szabad,
+      // mert a letöltés és a retention ezt használja.
+      const finalDestination: string | undefined = finishData.destination;
+      if (!finalDestination) {
+        throw new Error('A NAS nem adta vissza a feltöltött fájl útvonalát (destination).');
+      }
 
       // Automatically clean up excess older APKs on NAS (enforce max 3 retention)
       fetch('/api/admin/apps/clean-retention', {

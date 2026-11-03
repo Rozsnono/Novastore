@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
-import { enforceMaxApkRetention } from '@/lib/webdav';
+import { enforceMaxApkRetention, apkDirFromPath } from '@/lib/webdav';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
 
     // Enforce max 3 APK retention on NAS
     try {
-      await enforceMaxApkRetention(newApp.packageName, 3);
+      await enforceMaxApkRetention(newApp.packageName, 3, apkDirFromPath(newApp.apkWebDavPath));
     } catch (retentionErr) {
       console.warn(`[NAS Retention] Failed to enforce retention for ${newApp.packageName}:`, retentionErr);
     }
