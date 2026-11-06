@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
-import { getUploadKey } from '@/lib/settings';
-import { getStorageApiUrl } from '@/lib/storageApi';
+import { getUploadKey, getUploadUrl } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +20,14 @@ export async function GET(req: NextRequest) {
         { status: 503 }
       );
     }
-    return NextResponse.json({ success: true, data: { apiUrl: getStorageApiUrl(), apiKey } });
+    const apiUrl = await getUploadUrl();
+    if (!apiUrl) {
+      return NextResponse.json(
+        { error: 'A feltöltő szolgáltatás URL-je nincs beállítva. Add meg a Beállítások oldalon.' },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json({ success: true, data: { apiUrl, apiKey } });
   } catch (error: any) {
     console.error('Upload config error:', error?.message || error);
     return NextResponse.json({ error: error?.message || 'A feltöltési konfiguráció nem érhető el' }, { status: 500 });

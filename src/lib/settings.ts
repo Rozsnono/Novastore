@@ -144,3 +144,109 @@ export async function clearSecret(name: SecretName): Promise<void> {
   await Setting.deleteOne({ key: DEFINITIONS[name].dbKey });
   cache.delete(name);
 }
+
+
+/* ==========================================================================
+ * Nem titkos beállítások: a NAS feltöltő/letöltő szolgáltatás URL-je
+ * ========================================================================== */
+
+export type TextName = 'uploadUrl' | 'downloadUrl';
+export const TEXT_NAMES: TextName[] = ['uploadUrl', 'downloadUrl'];
+
+const TEXT_DEFINITIONS: Record<TextName, { dbKey: string; envVars: string[] }> = {
+  uploadUrl: { dbKey: 'storage.uploadUrl', envVars: ['UPLOAD_API_URL', 'NEXT_PUBLIC_UPLOAD_API_URL'] },
+  downloadUrl: { dbKey: 'storage.downloadUrl', envVars: [] },
+};
+
+const textCache = new Map<TextName, { value: string | null; source: SecretSource; at: number }>();
+
+/** URL ellenőrzése és normalizálása (http/https, záró perjelek nélkül). Hibás érték esetén hibát dob. */
+export function normalizeServiceUrl(input: string): string {
+  const trimmed = input.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error('Érvénytelen URL. Példa: https://storage.example.com');
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error('Az URL-nek http:// vagy https:// kezdetűnek kell lennie.');
+  }
+  return trimmed.replace(/\/+$/, '');
+}
+
+async function resolveText(name: TextName): Promise<{ value: string | null; source: SecretSource }> {
+  const hit = textCache.get(name);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return { value: hit.value, source: hit.source };
+
+  const def = TEXT_DEFINITIONS[name];
+  let result: { value: string | null; source: SecretSource } = { value: null, source: 'none' };
+  try {
+    await connectToDatabase();
+    const doc = await Setting.findOne({ key: def.dbKey }).lean();
+    if (doc?.value) result = { value: doc.value, source: 'db' };
+  } catch (err: any) {
+    console.error(`Beállítás (${name}) olvasási hiba, környezeti tartalékra váltok:`, err?.message || err);
+  }
+  if (!result.value) {
+    const envValue = readEnv(def.envVars);
+    if (envValue) result = { value: envValue, source: 'env' };
+  }
+  textCache.set(name, { ...result, at: Date.now() });
+  return result;
+}
+
+/** Feltöltő szolgáltatás URL-je (hiány esetén null). */
+export async function getUploadUrl(): Promise<string | null> {
+  return (await resolveText('uploadUrl')).value;
+}
+
+/** Letöltő szolgáltatás URL-je; külön megadott hiányában a feltöltő URL (korábbi viselkedés). */
+export async function getDownloadUrl(): Promise<string | null> {
+  const dl = await resolveText('downloadUrl');
+  return dl.value ?? (await resolveText('uploadUrl')).value;
+}
+
+export interface TextStatus {
+  name: TextName;
+  configured: boolean;
+  source: SecretSource;
+  /** Az URL nem titkos, ezért a felület megjeleníti. */
+  value: string | null;
+  updatedAt: string | null;
+}
+
+export async function getTextStatuses(): Promise<TextStatus[]> {
+  const out: TextStatus[] = [];
+  for (const name of TEXT_NAMES) {
+    const { value, source } = await resolveText(name);
+    let updatedAt: string | null = null;
+    if (source === 'db') {
+      try {
+        const doc = await Setting.findOne({ key: TEXT_DEFINITIONS[name].dbKey }).lean();
+        updatedAt = doc?.updatedAt ? new Date(doc.updatedAt).toISOString() : null;
+      } catch {
+        updatedAt = null;
+      }
+    }
+    out.push({ name, configured: Boolean(value), source, value, updatedAt });
+  }
+  return out;
+}
+
+export async function setText(name: TextName, value: string): Promise<void> {
+  const normalized = normalizeServiceUrl(value);
+  await connectToDatabase();
+  await Setting.findOneAndUpdate(
+    { key: TEXT_DEFINITIONS[name].dbKey },
+    { value: normalized },
+    { upsert: true, new: true }
+  );
+  textCache.delete(name);
+}
+
+export async function clearText(name: TextName): Promise<void> {
+  await connectToDatabase();
+  await Setting.deleteOne({ key: TEXT_DEFINITIONS[name].dbKey });
+  textCache.delete(name);
+}

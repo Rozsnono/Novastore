@@ -5,7 +5,7 @@ import AppItem from '@/lib/models/AppItem';
 import { getFileStreamFromWebDAV, getFileStatFromWebDAV } from '@/lib/webdav';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
 import { buildDirectDownloadUrl, toWebDavRelativePath } from '@/lib/storageApi';
-import { getDownloadKey } from '@/lib/settings';
+import { getDownloadKey, getDownloadUrl } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,6 +47,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       // A letöltő kulcs az admin Beállítások oldalról (titkosítva tárolva), env tartalékkal
       const directDownloadUrl = buildDirectDownloadUrl(app.apkWebDavPath, {
         apiKey: (await getDownloadKey()) || undefined,
+        baseUrl: (await getDownloadUrl()) || undefined,
       });
       if (directDownloadUrl.startsWith('https://')) {
         return NextResponse.redirect(directDownloadUrl, 307);

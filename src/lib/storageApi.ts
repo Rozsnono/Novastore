@@ -65,6 +65,8 @@ export function toWebDavRelativePath(p: string): string {
 export interface DirectDownloadOptions {
   inline?: boolean;
   apiKey?: string;
+  /** A szolgáltatás alap URL-je (admin Beállítások); hiányában a környezeti változó. */
+  baseUrl?: string;
   /** Ha igaz, az URL nem tartalmaz kulcsot (a kulcsot a kliens fejlécben küldi, titkosítva kapta meg). */
   omitKey?: boolean;
 }
@@ -80,7 +82,7 @@ export function buildDirectDownloadUrl(
   webdavPath: string,
   options: DirectDownloadOptions = {}
 ): string {
-  const baseUrl = getStorageApiUrl();
+  const baseUrl = options.baseUrl ? options.baseUrl.replace(/\/+$/, '') : getStorageApiUrl();
   const key = options.omitKey ? '' : options.apiKey || getStorageApiKey();
 
   // Normalize path (a szolgáltatás feltöltési gyökerével kiegészítve)

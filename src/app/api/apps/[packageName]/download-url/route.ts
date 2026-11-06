@@ -3,7 +3,7 @@ import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
 import { buildDirectDownloadUrl } from '@/lib/storageApi';
-import { getClientSecret, getDownloadKey } from '@/lib/settings';
+import { getClientSecret, getDownloadKey, getDownloadUrl } from '@/lib/settings';
 import { encryptForClient } from '@/lib/secretBox';
 
 export const dynamic = 'force-dynamic';
@@ -37,6 +37,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     const fileName = `${packageName}-v${app.versionCode}.apk`;
     const downloadKey = await getDownloadKey();
+    const baseUrl = (await getDownloadUrl()) || undefined;
     const nonce = req.headers.get('x-nova-nonce');
 
     // Új kliensek (x-nova-nonce fejléc): a letöltési kulcs NEM szerepel az URL-ben, hanem
@@ -58,7 +59,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       }
       return NextResponse.json({
         success: true,
-        downloadUrl: buildDirectDownloadUrl(app.apkWebDavPath, { omitKey: true }),
+        downloadUrl: buildDirectDownloadUrl(app.apkWebDavPath, { omitKey: true, baseUrl }),
         encryptedKey: envelope,
         fileName,
         totalBytes: Number(app.sizeBytes) || 0,
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     // Régi kliensek (visszafelé kompatibilitás): a kulcs az URL-ben utazik, mint korábban.
     const directDownloadUrl = buildDirectDownloadUrl(app.apkWebDavPath, {
       apiKey: downloadKey || undefined,
+      baseUrl,
     });
 
     return NextResponse.json({

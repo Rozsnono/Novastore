@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, Dices, KeyRound, Loader2, Save, ShieldAlert,
 import { Field, bareInputClass } from '@/components/AppFormParts';
 
 type SecretName = 'uploadKey' | 'downloadKey' | 'clientSecret';
+type TextName = 'uploadUrl' | 'downloadUrl';
 
 interface SecretStatus {
   name: SecretName;
@@ -14,7 +15,31 @@ interface SecretStatus {
   updatedAt: string | null;
 }
 
-/** A három beállítás leírása (felirat, magyarázat, súgó). */
+interface TextStatus {
+  name: TextName;
+  configured: boolean;
+  source: 'db' | 'env' | 'none';
+  value: string | null;
+  updatedAt: string | null;
+}
+
+/** A szolgáltatás URL-ek leírása (nem titkosak, a felület megjeleníti őket). */
+const URL_FIELDS: { name: TextName; label: string; help: string; placeholder: string }[] = [
+  {
+    name: 'uploadUrl',
+    label: 'Feltöltési API URL',
+    help: 'A NAS feltöltő szolgáltatás címe (az admin feltöltő ide küldi az APK-t).',
+    placeholder: 'https://storage.example.com',
+  },
+  {
+    name: 'downloadUrl',
+    label: 'Letöltési API URL',
+    help: 'A NAS letöltő szolgáltatás címe, ezt kapja a telefon. Üresen hagyva a feltöltési URL érvényes.',
+    placeholder: 'https://storage.example.com',
+  },
+];
+
+/** A titkos kulcsok leírása (felirat, magyarázat, súgó). */
 const FIELDS: { name: SecretName; label: string; help: string; canGenerate?: boolean }[] = [
   {
     name: 'downloadKey',
@@ -46,6 +71,9 @@ function sourceLabel(s: SecretStatus): string {
  */
 export default function SettingsForm() {
   const [statuses, setStatuses] = useState<SecretStatus[]>([]);
+  const [textStatuses, setTextStatuses] = useState<TextStatus[]>([]);
+  // Az URL mezők szerkesztett értéke (a betöltéskor a jelenlegi értékkel töltjük ki)
+  const [urlValues, setUrlValues] = useState<Record<TextName, string>>({ uploadUrl: '', downloadUrl: '' });
   const [encryptionConfigured, setEncryptionConfigured] = useState(true);
   const [values, setValues] = useState<Record<SecretName, string>>({ uploadKey: '', downloadKey: '', clientSecret: '' });
   const [loading, setLoading] = useState(true);
@@ -59,6 +87,11 @@ export default function SettingsForm() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'A beállítások betöltése nem sikerült');
       setStatuses(json.data.secrets);
+      setTextStatuses(json.data.texts);
+      setUrlValues({
+        uploadUrl: json.data.texts.find((t: TextStatus) => t.name === 'uploadUrl')?.value ?? '',
+        downloadUrl: json.data.texts.find((t: TextStatus) => t.name === 'downloadUrl')?.value ?? '',
+      });
       setEncryptionConfigured(json.data.encryptionConfigured);
     } catch (err: any) {
       setError(err.message || 'A beállítások betöltése nem sikerült');
@@ -71,7 +104,13 @@ export default function SettingsForm() {
     load();
   }, [load]);
 
-  const hasChanges = Object.values(values).some((v) => v.trim());
+  /** Az URL-ek közül csak a ténylegesen módosítottakat küldjük. */
+  const changedUrls = (Object.keys(urlValues) as TextName[]).filter((n) => {
+    const current = textStatuses.find((t) => t.name === n)?.value ?? '';
+    return urlValues[n].trim() !== current.trim() && urlValues[n].trim() !== '';
+  });
+  const hasChanges = Object.values(values).some((v) => v.trim()) || changedUrls.length > 0;
+  const hasSecretChanges = Object.values(values).some((v) => v.trim());
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +121,10 @@ export default function SettingsForm() {
       const res = await fetch('/api/admin/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify({
+          ...values,
+          ...Object.fromEntries(changedUrls.map((n) => [n, urlValues[n].trim()])),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'A mentés nem sikerült');
@@ -96,7 +138,7 @@ export default function SettingsForm() {
     }
   };
 
-  const handleClear = async (name: SecretName) => {
+  const handleClear = async (name: SecretName | TextName) => {
     if (!confirm('Biztosan törlöd az adatbázisban tárolt értéket? Ha van környezeti változó, az lép érvénybe.')) return;
     setError(null);
     setNotice(null);
@@ -134,7 +176,7 @@ export default function SettingsForm() {
           Beállítások
         </h1>
         <p className="text-sm text-ink-400 mt-1">
-          API kulcsok a NAS feltöltő és letöltő szolgáltatáshoz. A kulcsok titkosítva tárolódnak, és a telefonnak is
+          A NAS feltöltő és letöltő szolgáltatás címei és API kulcsai. A kulcsok titkosítva tárolódnak, és a telefonnak is
           titkosítva jutnak el.
         </p>
       </div>
@@ -149,6 +191,50 @@ export default function SettingsForm() {
           </span>
         </div>
       )}
+
+      <div className="bg-surface-card border border-surface-line rounded-2xl p-5 sm:p-6 space-y-5">
+        {URL_FIELDS.map((f) => {
+          const status = textStatuses.find((t) => t.name === f.name);
+          return (
+            <div key={f.name} className="space-y-2">
+              <div className="flex items-center gap-2 text-xs">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 ${
+                    status?.configured ? 'bg-acc-900 text-acc-300' : 'bg-amber-500/10 text-amber-400'
+                  }`}
+                >
+                  {status?.configured ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                  {!status?.configured
+                    ? 'Nincs beállítva'
+                    : status.source === 'db'
+                    ? 'Beállítva (adatbázis)'
+                    : 'Környezeti változóból (tartalék)'}
+                </span>
+                {status?.source === 'db' && (
+                  <button
+                    type="button"
+                    onClick={() => handleClear(f.name)}
+                    className="ml-auto inline-flex items-center gap-1 text-ink-400 hover:text-amber-400 transition-colors"
+                    aria-label={`${f.label} törlése`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Törlés
+                  </button>
+                )}
+              </div>
+              <Field label={f.label} hint={f.help}>
+                <input
+                  type="url"
+                  value={urlValues[f.name]}
+                  onChange={(e) => setUrlValues((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                  placeholder={f.placeholder}
+                  className={`${bareInputClass} font-mono`}
+                />
+              </Field>
+            </div>
+          );
+        })}
+      </div>
 
       <div className="bg-surface-card border border-surface-line rounded-2xl p-5 sm:p-6 space-y-5">
         {FIELDS.map((f) => {
@@ -222,7 +308,7 @@ export default function SettingsForm() {
       <div className="flex justify-end">
         <button
           type="submit"
-          disabled={saving || !hasChanges || !encryptionConfigured}
+          disabled={saving || !hasChanges || (hasSecretChanges && !encryptionConfigured)}
           className="glow-button px-6 py-2.5 rounded-xl text-sm font-semibold text-white flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
