@@ -167,7 +167,6 @@ export default function ChunkedUploader({
         formData.append('file', chunkBlob, targetFilename);
         formData.append('uploadId', remoteUploadId!);
         formData.append('chunkIndex', chunkIdx.toString());
-        formData.append('totalChunks', totalChunks.toString());
         formData.append('filename', targetFilename);
 
         let chunkUploaded = false;

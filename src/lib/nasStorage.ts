@@ -130,7 +130,8 @@ export async function nasDownload(path: string, range?: string | null): Promise<
   const res = await nasFetch('read', `/download?path=${encodeURIComponent(toStorageApiPath(path))}`, {
     headers: range ? { Range: range } : {},
   });
-  if (!res.ok && res.status !== 206) {
+  // 206 (részleges) és 416 (nem teljesíthető tartomány) is továbbadandó a kliensnek
+  if (!res.ok && res.status !== 206 && res.status !== 416) {
     throw new Error(await describeError(res, 'A fájl nem tölthető le'));
   }
   return res;
@@ -142,10 +143,14 @@ export async function nasDownload(path: string, range?: string | null): Promise<
 
 /** Fájl (vagy `recursive` esetén mappa) törlése. A már nem létező elem nem hiba. */
 export async function nasDelete(path: string, recursive = false): Promise<void> {
-  const res = await nasFetch('write', '/files', {
+  // A szolgáltatás dokumentációja szerint a törlés lekérdezési paraméterekkel megy (mappánál recursive=true);
+  // a törzset is elküldjük, hogy a régebbi szolgáltatás-verzió is értse.
+  const target = toStorageApiPath(path);
+  const query = `path=${encodeURIComponent(target)}${recursive ? '&recursive=true' : ''}`;
+  const res = await nasFetch('write', `/files?${query}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: toStorageApiPath(path), recursive }),
+    body: JSON.stringify({ path: target, recursive }),
   });
   if (res.status === 404) return;
   if (!res.ok) throw new Error(await describeError(res, `A törlés nem sikerült: ${path}`));
