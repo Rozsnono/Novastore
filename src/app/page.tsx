@@ -43,7 +43,7 @@ async function getLandingData() {
       totalApps,
       totalDownloads,
       novaStoreVersion: (novaStoreApp as any)?.versionName ? `v${(novaStoreApp as any).versionName}` : 'v2.0.1',
-      novaStoreDownloadUrl: '/api/apps/com.novastore.app/download',
+      novaStoreDownloadUrl: '/api/apps/com.novastore.app/download?stream=true',
     };
   } catch (e) {
     return {
@@ -51,7 +51,7 @@ async function getLandingData() {
       totalApps: 0,
       totalDownloads: 0,
       novaStoreVersion: 'v2.0.1',
-      novaStoreDownloadUrl: '/api/apps/com.novastore.app/download',
+      novaStoreDownloadUrl: '/api/apps/com.novastore.app/download?stream=true',
     };
   }
 }
@@ -215,7 +215,7 @@ export default async function HomePage() {
                       </div>
 
                       <a
-                        href={`/api/apps/${app.packageName}/download`}
+                        href={`/api/apps/${app.packageName}/download?stream=true`}
                         download={`${app.packageName}-v${app.versionCode}.apk`}
                         className="px-3.5 py-1.5 rounded-full bg-acc-500 hover:bg-acc-600 text-white text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95"
                       >

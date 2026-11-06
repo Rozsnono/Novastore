@@ -49,7 +49,7 @@ export default function Navbar() {
 
           {/* Download CTA */}
           <a
-            href="/api/apps/com.novastore.app/download"
+            href="/api/apps/com.novastore.app/download?stream=true"
             download="novastore.apk"
             className="glow-button flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold text-white transition-all active:scale-95 shrink-0"
           >
