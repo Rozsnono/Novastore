@@ -43,7 +43,7 @@ const AppItemSchema = new Schema<IAppItemDocument>(
     },
     apkWebDavPath: {
       type: String,
-      required: [true, 'WebDAV APK path is required'],
+      required: [true, 'APK storage path is required'],
     },
     sizeBytes: {
       type: Number,

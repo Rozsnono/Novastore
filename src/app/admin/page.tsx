@@ -37,14 +37,14 @@ export default async function AdminDashboardPage() {
               Alkalmazások
             </h1>
             <p className="text-sm text-ink-400 mt-1">
-              APK-tár, verziók és WebDAV NAS mentések kezelése
+              APK-tár, verziók és NAS tárhely kezelése
             </p>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>WebDAV NAS csatlakoztatva</span>
+              <span>NAS tároló</span>
             </div>
           </div>
         </div>

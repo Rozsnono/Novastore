@@ -76,11 +76,13 @@ Create `.env.local` inside `novastore-api/`:
 # MongoDB Connection
 MONGODB_URI=mongodb://localhost:27017/novastore
 
-# Synology / TrueNAS / Nextcloud WebDAV NAS Storage
-WEBDAV_URL=https://nas.yourdomain.com/remote.php/dav/files/admin/
-WEBDAV_USERNAME=admin
-WEBDAV_PASSWORD=your_nas_secure_password
-WEBDAV_ROOT_PATH=/novastore/apps
+# NAS tároló: a feltöltő/letöltő szolgáltatás URL-je és API kulcsai az admin Beállítások oldalon adhatók meg
+# (nincs közvetlen WebDAV kapcsolat). Env tartalék:
+UPLOAD_API_URL=https://storage.example.com
+# Az appok könyvtára a tárolón (opcionális)
+APPS_STORAGE_DIR=/novastore/apps
+# A Beállítások oldal kulcsmentéséhez (>=32 karakter)
+SETTINGS_ENCRYPTION_KEY=<véletlen-titok>
 
 # Admin Dashboard Authentication
 ADMIN_MASTER_KEY=<erős-véletlen-jelszó-kötelező>

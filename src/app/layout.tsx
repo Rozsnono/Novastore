@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'NovaStore - Next-Gen Android App Store & Distribution',
-  description: 'Enterprise custom Android app store with WebDAV NAS streaming, chunked installs, and passive updates.',
+  description: 'Enterprise custom Android app store with NAS streaming, chunked installs, and passive updates.',
 };
 
 export default function RootLayout({

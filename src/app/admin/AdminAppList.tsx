@@ -200,7 +200,7 @@ export default function AdminAppList({ initialApps }: AdminAppListProps) {
             <p className="text-sm text-ink-300 leading-relaxed">
               Biztosan törlöd a(z) <strong className="text-white">{deleteTarget.title}</strong> alkalmazást (
               <span className="font-mono text-xs text-acc-300">{deleteTarget.packageName}</span>)? Ez törli az
-              adatbázisbejegyzést, és <strong>véglegesen eltávolítja az összes APK-t és médiafájlt a WebDAV NAS-ról</strong>.
+              adatbázisbejegyzést, és <strong>véglegesen eltávolítja az összes APK-t és médiafájlt a NAS-ról</strong>.
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">

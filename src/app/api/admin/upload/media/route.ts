@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
-import { getAppStoragePath, uploadBufferToWebDAV } from '@/lib/webdav';
+import { getAppStoragePath, nasUploadBuffer } from '@/lib/nasStorage';
 import mediaCache from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid media type' }, { status: 400 });
     }
 
-    await uploadBufferToWebDAV(remotePath, buffer);
+    await nasUploadBuffer(remotePath, buffer);
 
     return NextResponse.json({
       success: true,
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error('Error uploading media:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to upload media to WebDAV' },
+      { error: error.message || 'Failed to upload media to storage' },
       { status: 500 }
     );
   }

@@ -84,7 +84,7 @@ export default async function HomePage() {
 
             {/* Subtitle */}
             <p className="text-sm sm:text-lg text-ink-300 font-normal leading-relaxed px-2 sm:px-0">
-              Biztonságos alkalmazásterjesztés saját WebDAV NAS szerverről: darabolt letöltés, automatikus újracsatlakozás, jogosultságkezelés és önfrissítő rendszer.
+              Biztonságos alkalmazásterjesztés saját NAS tárhelyről: darabolt letöltés, automatikus újracsatlakozás, jogosultságkezelés és önfrissítő rendszer.
             </p>
 
             {/* CTA Buttons - Mobile-first Full Width Stack */}
@@ -248,7 +248,7 @@ export default async function HomePage() {
               <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-acc-900 flex items-center justify-center">
                 <HardDrive className="w-5 h-5 sm:w-6 sm:h-6 text-acc-400" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-white">WebDAV NAS védelem</h3>
+              <h3 className="text-lg sm:text-xl font-semibold text-white">NAS tárhely védelem</h3>
               <p className="text-ink-400 text-xs sm:text-sm leading-relaxed">
                 A saját NAS tárhelyed teljesen védve marad a Next.js biztonsági reverse proxy mögött, memóriabeli gyorsítótárral.
               </p>
@@ -303,7 +303,7 @@ export default async function HomePage() {
             <div className="glass-panel p-5 sm:p-6 rounded-2xl space-y-2 sm:space-y-3">
               <div className="flex items-center gap-2.5">
                 <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 text-acc-400" />
-                <h4 className="font-semibold text-white text-sm sm:text-base">WebDAV tárolóréteg</h4>
+                <h4 className="font-semibold text-white text-sm sm:text-base">Tárolóréteg</h4>
               </div>
               <p className="text-xs text-ink-400 leading-relaxed">
                 Tárolja a bináris APK-kat, ikonokat és képernyőképeket automatikus verziómegőrzéssel (aktuális + előző backup verzió).

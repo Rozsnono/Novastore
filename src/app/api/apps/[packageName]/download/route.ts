@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Readable } from 'stream';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
-import { getFileStreamFromWebDAV, getFileStatFromWebDAV } from '@/lib/webdav';
+import { nasDownload } from '@/lib/nasStorage';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
-import { buildDirectDownloadUrl, toWebDavRelativePath } from '@/lib/storageApi';
+import { buildDirectDownloadUrl } from '@/lib/storageApi';
 import { getDownloadKey, getDownloadUrl } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
@@ -54,59 +53,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
       }
     }
 
-    // Determine total size
-    let totalSize = Number(app.sizeBytes) || 0;
-    if (totalSize <= 0) {
-      try {
-        const stat = await getFileStatFromWebDAV(toWebDavRelativePath(app.apkWebDavPath));
-        totalSize = Number(stat.size) || 0;
-      } catch (e) {
-        console.warn(`Could not stat WebDAV file ${app.apkWebDavPath}:`, e);
-      }
-    }
-
-    const rangeHeader = req.headers.get('range');
-
-    if (rangeHeader && totalSize > 0) {
-      // Parse Range header e.g. "bytes=0-4194303"
-      const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-      if (match) {
-        const start = parseInt(match[1], 10);
-        let end = match[2] ? parseInt(match[2], 10) : totalSize - 1;
-
-        // RFC 7233: a fájl végén túli végpontot levágjuk, nem utasítjuk el
-        end = Math.min(end, totalSize - 1);
-
-        if (start >= totalSize || start > end) {
-          return new NextResponse(null, {
-            status: 416,
-            headers: {
-              'Content-Range': `bytes */${totalSize}`,
-            },
-          });
-        }
-
-        const chunkLength = end - start + 1;
-        const nodeStream = await getFileStreamFromWebDAV(toWebDavRelativePath(app.apkWebDavPath), { start, end });
-        const webStream = Readable.toWeb(nodeStream as Readable);
-
-        return new NextResponse(webStream as any, {
-          status: 206,
-          headers: {
-            'Content-Type': 'application/vnd.android.package-archive',
-            'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-            'Accept-Ranges': 'bytes',
-            'Content-Length': chunkLength.toString(),
-            'Cache-Control': 'no-cache',
-            'Content-Disposition': `attachment; filename="${safeFileBase}-v${app.versionCode}.apk"`,
-          },
-        });
-      }
-    }
-
-    // Full file streaming download (Instant start, no RAM buffering)
-    const nodeStream = await getFileStreamFromWebDAV(toWebDavRelativePath(app.apkWebDavPath));
-    const webStream = Readable.toWeb(nodeStream as Readable);
+    // Streamelt letöltés a NAS letöltő API-n keresztül (a Range fejléc átadódik, így a megszakított
+    // letöltés folytatható; nincs memóriába töltés).
+    const upstream = await nasDownload(app.apkWebDavPath, req.headers.get('range'));
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/vnd.android.package-archive',
@@ -114,15 +63,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
       'Cache-Control': 'no-cache',
       'Content-Disposition': `attachment; filename="${safeFileBase}-v${app.versionCode}.apk"`,
     };
-
-    if (totalSize > 0) {
-      headers['Content-Length'] = totalSize.toString();
+    for (const h of ['content-length', 'content-range']) {
+      const v = upstream.headers.get(h);
+      if (v) headers[h] = v;
     }
 
-    return new NextResponse(webStream as any, {
-      status: 200,
-      headers,
-    });
+    return new NextResponse(upstream.body, { status: upstream.status, headers });
   } catch (error: any) {
     console.error(`Error streaming APK download for ${packageName}:`, error);
     return NextResponse.json(

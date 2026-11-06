@@ -276,7 +276,7 @@ export default function EditAppPage({ params }: PageProps) {
             >
               <p className="text-xs text-ink-400">
                 Új verzió feltöltésekor a korábbi aktív verzió automatikusan biztonsági másolatként
-                mentődik a WebDAV szerveren.
+                mentődik a NAS tárolón.
               </p>
               <ChunkedUploader
                 packageName={formData.packageName}

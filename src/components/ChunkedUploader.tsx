@@ -114,7 +114,7 @@ export default function ChunkedUploader({
     }
 
     const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
-    // Relatív útvonal: a szolgáltatás a saját feltöltési gyökere (WEBDAV_UPLOAD_DIR, pl. /EpochMedia)
+    // Relatív útvonal: a szolgáltatás a saját feltöltési gyökere (feltöltési gyökér, pl. /EpochMedia)
     // alá teszi. Abszolút, a gyökéren kívüli útvonalat elutasít ("targetPath must be located inside...").
     // A könyvtár a konfigurációból jön (mappához kötött kulcsnál a kulcs mappájához képest értendő),
     // alapértelmezés: novastore/apps
@@ -223,7 +223,7 @@ export default function ChunkedUploader({
       }
 
       // 3. Finalize & Stream Merge directly on Synology NAS
-      setStatusMessage('Darabok véglegesítése és streaming mentés WebDAV tárolóra...');
+      setStatusMessage('Darabok véglegesítése és mentés a NAS tárolóra...');
       setEstimatedTimeStr('összefűzés...');
 
       const finishResponse = await fetch(`${uploadApiUrl}/upload/finish`, {

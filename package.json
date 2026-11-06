@@ -17,8 +17,7 @@
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^2.5.5",
-    "webdav": "^5.7.1"
+    "tailwind-merge": "^2.5.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

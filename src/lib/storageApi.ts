@@ -38,7 +38,7 @@ export function getStorageApiKey(): string {
 /**
  * Az NAS szolgáltatás feltöltési gyökere (UPLOAD_STORAGE_ROOT, pl. "/EpochMedia"): a szolgáltatás
  * a "/"-lel kezdődő útvonalat ABSZOLÚTNAK veszi, és a gyökéren kívülit elutasítja (403).
- * A szerver WebDAV-kliense viszont a WebDAV-gyökérhez képesti útvonalakat tárol (pl. "/novastore/apps/..."),
+ * Az adatbázis a tároló-gyökérhez képesti útvonalakat tárol (pl. "/novastore/apps/..."),
  * ezért a szolgáltatásnak küldött útvonalat a gyökérrel kiegészítjük. Ha a változó nincs beállítva,
  * az útvonal változatlan marad (visszafelé kompatibilis).
  */
@@ -46,7 +46,7 @@ function getStorageRoot(): string {
   return (process.env.UPLOAD_STORAGE_ROOT || '').trim().replace(/\/+$/, '');
 }
 
-/** WebDAV-relatív (vagy már gyökeres) útvonalból a szolgáltatás számára érvényes abszolút útvonal. */
+/** Gyökérhez képesti (vagy már gyökeres) útvonalból a szolgáltatás számára érvényes abszolút útvonal. */
 export function toStorageApiPath(p: string): string {
   const clean = p.startsWith('/') ? p : `/${p}`;
   const root = getStorageRoot();
@@ -54,7 +54,7 @@ export function toStorageApiPath(p: string): string {
   return `${root}${clean}`;
 }
 
-/** A szolgáltatás abszolút útvonalából (pl. "/EpochMedia/novastore/...") a WebDAV-relatív útvonal. */
+/** A szolgáltatás abszolút útvonalából (pl. "/EpochMedia/novastore/...") a gyökérhez képesti útvonal. */
 export function toWebDavRelativePath(p: string): string {
   const clean = p.startsWith('/') ? p : `/${p}`;
   const root = getStorageRoot();
@@ -74,7 +74,7 @@ export interface DirectDownloadOptions {
 /**
  * Constructs a direct streaming download URL pointing to the NASiS3 /download endpoint.
  * 
- * @param webdavPath - The remote WebDAV path of the file (e.g. "/novastore/apps/com.foo/apk/app-v1.apk")
+ * @param webdavPath - The stored storage path of the file (e.g. "/novastore/apps/com.foo/apk/app-v1.apk")
  * @param options - Additional download options (inline preview, custom apiKey)
  * @returns Fully-qualified direct download URL
  */

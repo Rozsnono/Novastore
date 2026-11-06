@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
-import { manageApkVersioningFromChunks } from '@/lib/webdav';
+import { manageApkVersioningFromChunks } from '@/lib/nasStorage';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
     }
 
 
-    // Upload & version manage on WebDAV NAS
+    // Feltöltés és verziókezelés a NAS tároló API-n keresztül
     const { finalPath, sizeBytes } = await manageApkVersioningFromChunks(
       packageName.toLowerCase().trim(),
       versionCodeNum,

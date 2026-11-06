@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAppStoragePath, getFileBufferFromWebDAV } from '@/lib/webdav';
+import { getAppStoragePath, nasReadBuffer } from '@/lib/nasStorage';
 import mediaCache from '@/lib/cache';
 
 export const dynamic = 'force-dynamic';
@@ -30,11 +30,11 @@ export async function GET(req: NextRequest, context: RouteContext) {
     });
   }
 
-  // 2. Fetch from WebDAV NAS
+  // 2. Fetch from NAS storage API
   try {
     const appDir = getAppStoragePath(packageName);
     const remotePath = `${appDir}/screenshots/screenshot_${index}.png`;
-    const buffer = await getFileBufferFromWebDAV(remotePath);
+    const buffer = await nasReadBuffer(remotePath);
 
     const contentType = 'image/png';
     mediaCache.set(cacheKey, buffer, contentType);

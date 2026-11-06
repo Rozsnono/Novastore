@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
-import { deleteWebDAVPath, getAppStoragePath, enforceMaxApkRetention, apkDirFromPath } from '@/lib/webdav';
+import { nasDelete, getAppStoragePath, enforceMaxApkRetention, apkDirFromPath } from '@/lib/nasStorage';
 import mediaCache from '@/lib/cache';
 import Review from '@/lib/models/Review';
 
@@ -124,9 +124,13 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     // Az alkalmazás értékelései sem maradhatnak árván
     await Review.deleteMany({ packageName: app.packageName });
 
-    // Purge app folder from WebDAV NAS
+    // Az app mappájának törlése a NAS-ról (tároló API). Hiba esetén naplózunk, de a DB-bejegyzés törlése folytatódik.
     const appNasPath = getAppStoragePath(app.packageName);
-    await deleteWebDAVPath(appNasPath);
+    try {
+      await nasDelete(appNasPath, true);
+    } catch (nasErr) {
+      console.error(`A NAS mappa törlése nem sikerült (${appNasPath}):`, nasErr);
+    }
 
     // Invalidate media cache
     mediaCache.invalidate(`icon_${app.packageName}`);
@@ -134,7 +138,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
     return NextResponse.json({
       success: true,
-      message: `App ${app.title} (${app.packageName}) and all WebDAV files permanently deleted.`,
+      message: `App ${app.title} (${app.packageName}) and all NAS files permanently deleted.`,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

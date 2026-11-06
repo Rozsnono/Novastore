@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAdminSession } from '@/lib/auth';
 import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
-import { enforceMaxApkRetention, apkDirFromPath } from '@/lib/webdav';
+import { enforceMaxApkRetention, apkDirFromPath } from '@/lib/nasStorage';
 
 export const dynamic = 'force-dynamic';
 
