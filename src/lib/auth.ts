@@ -114,4 +114,16 @@ export async function getAdminSession(req?: NextRequest): Promise<AdminSession |
   return verifyAdminSessionToken(token);
 }
 
+/**
+ * Igaz, ha a kérés HTTPS-en érkezett (közvetlenül vagy a reverse proxy `x-forwarded-proto` fejlécével).
+ * A süti `Secure` jelzőjét ettől tesszük függővé: a `Secure` sütit a böngésző sima HTTP-n eldobja,
+ * így production módban, HTTP-n (pl. belső hálózat, proxy nélkül) a belépés "sikeres" lenne,
+ * de a session süti nem tárolódna el.
+ */
+export function isSecureRequest(req: NextRequest): boolean {
+  const forwarded = req.headers.get('x-forwarded-proto')?.split(',')[0]?.trim().toLowerCase();
+  if (forwarded) return forwarded === 'https';
+  return req.nextUrl.protocol === 'https:';
+}
+
 export { COOKIE_NAME };

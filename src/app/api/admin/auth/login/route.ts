@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMasterKey, createAdminSessionToken, COOKIE_NAME } from '@/lib/auth';
+import { verifyMasterKey, createAdminSessionToken, isSecureRequest, COOKIE_NAME } from '@/lib/auth';
 import { checkRateLimit, getClientIp, resetRateLimit } from '@/lib/rateLimit';
 
 export async function POST(req: NextRequest) {
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
       name: COOKIE_NAME,
       value: token,
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecureRequest(req),
       sameSite: 'lax',
       path: '/',
       maxAge: 60 * 60 * 24 * 7, // 7 days
