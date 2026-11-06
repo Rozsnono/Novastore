@@ -5,6 +5,7 @@ import AppItem from '@/lib/models/AppItem';
 import { getFileStreamFromWebDAV, getFileStatFromWebDAV } from '@/lib/webdav';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
 import { buildDirectDownloadUrl, toWebDavRelativePath } from '@/lib/storageApi';
+import { getDownloadKey } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,10 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
     // Direct high-performance redirect to dedicated NASiS3 download service (NewFileSharer pattern)
     if (!forceStream) {
-      const directDownloadUrl = buildDirectDownloadUrl(app.apkWebDavPath);
+      // A letöltő kulcs az admin Beállítások oldalról (titkosítva tárolva), env tartalékkal
+      const directDownloadUrl = buildDirectDownloadUrl(app.apkWebDavPath, {
+        apiKey: (await getDownloadKey()) || undefined,
+      });
       if (directDownloadUrl.startsWith('https://')) {
         return NextResponse.redirect(directDownloadUrl, 307);
       }

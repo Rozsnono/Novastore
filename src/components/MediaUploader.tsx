@@ -35,7 +35,7 @@ export default function MediaUploader({
   const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     if (!packageName.trim()) {
-      setError('Please enter Package Name first.');
+      setError('Előbb add meg a csomagnevet.');
       return;
     }
 
@@ -57,13 +57,13 @@ export default function MediaUploader({
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) throw new Error('Failed to upload app icon');
+      if (!res.ok) throw new Error('Az ikon feltöltése nem sikerült');
       const data = await res.json();
       const updatedUrl = `${data.url}?t=${Date.now()}`;
       onIconChange(data.url);
       setPreviewIconUrl(updatedUrl);
     } catch (err: any) {
-      setError(err.message || 'Error uploading icon');
+      setError(err.message || 'Hiba az ikon feltöltésekor');
       setPreviewIconUrl(iconUrl);
     } finally {
       setUploadingIcon(false);
@@ -73,7 +73,7 @@ export default function MediaUploader({
   const handleScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     if (!packageName.trim()) {
-      setError('Please enter Package Name first.');
+      setError('Előbb add meg a csomagnevet.');
       return;
     }
 
@@ -92,11 +92,11 @@ export default function MediaUploader({
         method: 'POST',
         body: formData,
       });
-      if (!res.ok) throw new Error('Failed to upload screenshot');
+      if (!res.ok) throw new Error('A képernyőkép feltöltése nem sikerült');
       const data = await res.json();
       onScreenshotsChange([...screenshots, data.url]);
     } catch (err: any) {
-      setError(err.message || 'Error uploading screenshot');
+      setError(err.message || 'Hiba a képernyőkép feltöltésekor');
     } finally {
       setUploadingScreenshot(false);
     }
@@ -110,27 +110,27 @@ export default function MediaUploader({
     <div className="space-y-6">
       {/* Icon Uploader */}
       <div>
-        <label className="block text-sm font-medium text-slate-200 mb-2">
-          App Icon (Square PNG/JPEG)
+        <label className="block text-xs font-medium text-ink-300 mb-2">
+          Alkalmazás ikon (négyzet alakú PNG/JPEG)
         </label>
         <div className="flex items-center gap-4">
-          <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0 relative group">
+          <div className="w-20 h-20 rounded-2xl bg-[#242020] border border-surface-line flex items-center justify-center overflow-hidden shrink-0 relative group">
             {previewIconUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewIconUrl} alt="App Icon" className="w-full h-full object-cover" />
+              <img src={previewIconUrl} alt="Alkalmazás ikon" className="w-full h-full object-cover" />
             ) : (
-              <ImageIcon className="w-8 h-8 text-slate-500" />
+              <ImageIcon className="w-8 h-8 text-ink-500" />
             )}
             {uploadingIcon && (
               <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+                <Loader2 className="w-6 h-6 text-acc-400 animate-spin" />
               </div>
             )}
           </div>
 
           <label className="glow-button px-4 py-2 rounded-xl text-xs font-semibold text-white cursor-pointer inline-flex items-center gap-2 hover:opacity-90 transition-opacity">
             <Upload className="w-3.5 h-3.5" />
-            <span>{iconUrl ? 'Replace Icon' : 'Upload Icon'}</span>
+            <span>{iconUrl ? 'Ikon cseréje' : 'Ikon feltöltése'}</span>
             <input
               type="file"
               accept="image/png, image/jpeg, image/webp"
@@ -144,38 +144,38 @@ export default function MediaUploader({
 
       {/* Screenshots Uploader */}
       <div>
-        <label className="block text-sm font-medium text-slate-200 mb-2">
-          Screenshots ({screenshots.length} uploaded)
+        <label className="block text-xs font-medium text-ink-300 mb-2">
+          Képernyőképek ({screenshots.length} feltöltve)
         </label>
         <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-3">
           {screenshots.map((url, idx) => (
             <div
               key={idx}
-              className="aspect-[9/16] rounded-xl bg-white/5 border border-white/10 overflow-hidden relative group"
+              className="aspect-[9/16] rounded-xl bg-[#242020] border border-surface-line overflow-hidden relative group"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={url}
-                alt={`Screenshot ${idx + 1}`}
+                alt={`Képernyőkép ${idx + 1}`}
                 className="w-full h-full object-cover"
               />
               <button
                 type="button"
                 onClick={() => removeScreenshot(idx)}
-                className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/70 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2 p-1.5 rounded-lg bg-black/70 text-amber-400 hover:text-amber-300 opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
           ))}
 
-          <label className="aspect-[9/16] rounded-xl border-2 border-dashed border-white/10 hover:border-indigo-500/50 bg-white/[0.02] flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-white/[0.04] transition-all">
+          <label className="aspect-[9/16] rounded-xl border-2 border-dashed border-ink-600 hover:border-acc-500/60 flex flex-col items-center justify-center gap-2 px-2 text-center cursor-pointer hover:bg-white/[0.03] transition-colors">
             {uploadingScreenshot ? (
-              <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+              <Loader2 className="w-6 h-6 text-acc-400 animate-spin" />
             ) : (
               <>
-                <Plus className="w-6 h-6 text-slate-400" />
-                <span className="text-[11px] font-medium text-slate-400">Add Screenshot</span>
+                <Plus className="w-6 h-6 text-ink-400" />
+                <span className="text-[11px] font-medium text-ink-400">Képernyőkép hozzáadása</span>
               </>
             )}
             <input
@@ -189,7 +189,7 @@ export default function MediaUploader({
         </div>
       </div>
 
-      {error && <p className="text-xs text-red-400">{error}</p>}
+      {error && <p className="text-xs text-amber-400">{error}</p>}
     </div>
   );
 }

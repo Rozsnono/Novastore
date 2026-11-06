@@ -13,7 +13,7 @@ export default async function AdminLogsPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#090d16] text-white">
+    <div className="min-h-screen flex flex-col bg-surface text-white">
       <AdminNavbar currentPath="/admin/logs" />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">

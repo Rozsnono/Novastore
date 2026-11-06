@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
     if (typeof password !== 'string' || !password || !verifyMasterKey(password)) {
       return NextResponse.json(
-        { error: 'Invalid masterkey password' },
+        { error: 'Hibás mesterkulcs' },
         { status: 401 }
       );
     }

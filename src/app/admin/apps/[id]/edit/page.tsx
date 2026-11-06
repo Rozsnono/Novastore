@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import AdminNavbar from '@/components/AdminNavbar';
 import ChunkedUploader from '@/components/ChunkedUploader';
 import MediaUploader from '@/components/MediaUploader';
-import { ArrowLeft, Save, AlertCircle, RefreshCw, CheckCircle, Loader2, Shield } from 'lucide-react';
+import { AlertCircle, Loader2, Trash2 } from 'lucide-react';
+import { Field, FormSection, FormTopBar, AccessPicker, AppPreview, bareInputClass } from '@/components/AppFormParts';
 import { IAppItem, AppAccessLevel } from '@/types';
 
 interface PageProps {
@@ -43,7 +43,7 @@ export default function EditAppPage({ params }: PageProps) {
     async function fetchApp() {
       try {
         const res = await fetch(`/api/admin/apps/${id}`);
-        if (!res.ok) throw new Error('App not found');
+        if (!res.ok) throw new Error('Az alkalmazás nem található');
         const data = await res.json();
         setApp(data.data);
         setFormData({
@@ -62,7 +62,7 @@ export default function EditAppPage({ params }: PageProps) {
         });
         setCustomPermInput((data.data.requiredPermissions || []).join(', '));
       } catch (err: any) {
-        setError(err.message || 'Failed to load app');
+        setError(err.message || 'Az alkalmazás betöltése nem sikerült');
       } finally {
         setLoading(false);
       }
@@ -78,6 +78,29 @@ export default function EditAppPage({ params }: PageProps) {
         : [...prev.requiredRoles, role];
       return { ...prev, requiredRoles: updated };
     });
+  };
+
+  /** Alkalmazás törlése (DB + NAS fájlok) megerősítés után. */
+  const handleDelete = async () => {
+    if (
+      !confirm(
+        `Biztosan törlöd a(z) ${formData.title} alkalmazást? Az adatbázisbejegyzés és az összes APK/médiafájl véglegesen törlődik a NAS-ról.`
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/apps/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Az alkalmazás törlése nem sikerült');
+      router.push('/admin');
+      router.refresh();
+    } catch (err: any) {
+      console.error('Delete app error:', err);
+      setError(err.message || 'Az alkalmazás törlése nem sikerült');
+      setSaving(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -116,315 +139,180 @@ export default function EditAppPage({ params }: PageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#090d16] text-white">
-        <Loader2 className="w-8 h-8 text-indigo-400 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-surface text-white">
+        <Loader2 className="w-8 h-8 text-acc-400 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#090d16] text-white">
+    <div className="min-h-screen flex flex-col bg-surface text-white">
       <AdminNavbar currentPath="/admin" />
 
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 space-y-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/admin"
-              className="p-2 text-slate-400 hover:text-white hover:bg-white/5 rounded-xl border border-white/5 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-            </Link>
-            <div>
-              <h1 className="text-2xl font-extrabold text-white">Alkalmazás Szerkesztése</h1>
-              <p className="text-xs font-mono text-indigo-400">{formData.packageName}</p>
-            </div>
-          </div>
-        </div>
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 pb-10">
+        <FormTopBar
+          title="Alkalmazás szerkesztése"
+          subtitle={formData.packageName}
+          submitLabel={saving ? 'Mentés...' : 'Módosítások mentése'}
+          busy={saving}
+          formId="app-form"
+        />
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Basic Details */}
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
-            <h2 className="text-base font-bold text-white border-b border-white/10 pb-3">
-              Alapadatok
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Alkalmazás Neve *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.title}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Csomagnév (Zárolt)
-                </label>
-                <input
-                  type="text"
-                  disabled
-                  value={formData.packageName}
-                  className="w-full px-4 py-2.5 bg-white/[0.02] border border-white/5 rounded-xl text-slate-400 text-sm font-mono cursor-not-allowed"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Verziószám *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.versionName}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, versionName: e.target.value }))}
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                  Verziókód (Egész szám) *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  step="1"
-                  value={formData.versionCode}
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    setFormData((prev) => ({
-                      ...prev,
-                      versionCode: raw === '' ? '' : parseInt(raw, 10) || '',
-                    }));
-                  }}
-                  onBlur={() => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      versionCode:
-                        !prev.versionCode || Number(prev.versionCode) < 1
-                          ? 1
-                          : Number(prev.versionCode),
-                    }));
-                  }}
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm font-mono focus:outline-none focus:border-indigo-500"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Belső verziószám (pl. 7). Frissítés észlelésekor a kliens ezt hasonlítja össze.
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                Leírás *
-              </label>
-              <textarea
-                required
-                rows={4}
-                value={formData.description}
-                onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-          </div>
-
-          {/* Section 2: Access Control & Permissions */}
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
-            <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-              <Shield className="w-4 h-4 text-indigo-400" />
-              <span>Hozzáférési Szint & Jogosultságok</span>
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label
-                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
-                  formData.accessLevel === 'public'
-                    ? 'bg-indigo-500/10 border-indigo-500 text-white'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="accessLevel"
-                  value="public"
-                  checked={formData.accessLevel === 'public'}
-                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'public' }))}
-                  className="hidden"
-                />
-                <span className="font-bold text-sm">🌍 Nyilvános (Public)</span>
-                <span className="text-xs text-slate-400">Bárki letöltheti regisztráció nélkül.</span>
-              </label>
-
-              <label
-                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
-                  formData.accessLevel === 'registered'
-                    ? 'bg-indigo-500/10 border-indigo-500 text-white'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="accessLevel"
-                  value="registered"
-                  checked={formData.accessLevel === 'registered'}
-                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'registered' }))}
-                  className="hidden"
-                />
-                <span className="font-bold text-sm">👤 Regisztráltak</span>
-                <span className="text-xs text-slate-400">Bejelentkezett fiók szükséges a letöltéshez.</span>
-              </label>
-
-              <label
-                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
-                  formData.accessLevel === 'age_18'
-                    ? 'bg-amber-500/10 border-amber-500 text-white'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="accessLevel"
-                  value="age_18"
-                  checked={formData.accessLevel === 'age_18'}
-                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'age_18' }))}
-                  className="hidden"
-                />
-                <span className="font-bold text-sm">🔞 18+ Korhatáros</span>
-                <span className="text-xs text-slate-400">Csak 18 éven felüli regisztrált felhasználóknak.</span>
-              </label>
-
-              <label
-                className={`p-4 rounded-2xl border cursor-pointer flex flex-col gap-1 transition-all ${
-                  formData.accessLevel === 'restricted'
-                    ? 'bg-purple-500/10 border-purple-500 text-white'
-                    : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/[0.08]'
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="accessLevel"
-                  value="restricted"
-                  checked={formData.accessLevel === 'restricted'}
-                  onChange={() => setFormData((prev) => ({ ...prev, accessLevel: 'restricted' }))}
-                  className="hidden"
-                />
-                <span className="font-bold text-sm">🔒 Zárt / VIP Hozzáférés</span>
-                <span className="text-xs text-slate-400">Csak a kijelölt szerepkörök tölthetik le.</span>
-              </label>
-            </div>
-
-            {formData.accessLevel === 'restricted' && (
-              <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/10 space-y-4">
-                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
-                  Engedélyezett Szerepkörök (Roles)
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {['vip', 'tester', 'developer', 'admin'].map((role) => (
-                    <button
-                      key={role}
-                      type="button"
-                      onClick={() => handleRoleToggle(role)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
-                        formData.requiredRoles.includes(role)
-                          ? 'bg-indigo-500 border-indigo-400 text-white shadow-md'
-                          : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10'
-                      }`}
-                    >
-                      {role.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
-                    Egyedi jogosultsági címkék (vesszővel elválasztva)
-                  </label>
+        <form
+          id="app-form"
+          onSubmit={handleSubmit}
+          className="max-w-6xl mx-auto mt-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-6 items-start"
+        >
+          {/* Bal oszlop: szerkeszthető adatok */}
+          <div className="space-y-6 min-w-0">
+            <FormSection step={1} title="Alapadatok">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Alkalmazás neve *">
                   <input
                     type="text"
-                    value={customPermInput}
-                    onChange={(e) => setCustomPermInput(e.target.value)}
-                    placeholder="pl. internal-tools, cluedo-beta, staff"
-                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-xs font-mono placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    required
+                    value={formData.title}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+                    className={bareInputClass}
                   />
-                </div>
+                </Field>
+
+                <Field label="Csomagnév (zárolt)" disabled>
+                  <input type="text" disabled value={formData.packageName} className={`${bareInputClass} font-mono`} />
+                </Field>
+
+                <Field label="Verziónév *">
+                  <input
+                    type="text"
+                    required
+                    value={formData.versionName}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, versionName: e.target.value }))}
+                    className={bareInputClass}
+                  />
+                </Field>
+
+                <Field label="Verziókód (egész szám) *">
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    step="1"
+                    value={formData.versionCode}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setFormData((prev) => ({
+                        ...prev,
+                        versionCode: raw === '' ? '' : parseInt(raw, 10) || '',
+                      }));
+                    }}
+                    onBlur={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        versionCode:
+                          !prev.versionCode || Number(prev.versionCode) < 1
+                            ? 1
+                            : Number(prev.versionCode),
+                      }));
+                    }}
+                    className={`${bareInputClass} font-mono`}
+                  />
+                </Field>
               </div>
-            )}
+              <p className="text-[11px] text-ink-500 -mt-1 px-1">
+                A verziókód belső egész szám (pl. 7); frissítés észlelésekor a kliens ezt hasonlítja össze.
+              </p>
+
+              <Field label="Leírás *">
+                <textarea
+                  required
+                  rows={4}
+                  value={formData.description}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
+                  className={`${bareInputClass} resize-y`}
+                />
+              </Field>
+            </FormSection>
+
+            <FormSection step={2} title="Ki töltheti le?">
+              <AccessPicker
+                value={formData.accessLevel}
+                onChange={(level) => setFormData((prev) => ({ ...prev, accessLevel: level }))}
+                roles={formData.requiredRoles}
+                onRoleToggle={handleRoleToggle}
+                customPerm={customPermInput}
+                onCustomPermChange={setCustomPermInput}
+              />
+            </FormSection>
+
+            <FormSection step={3} title="Ikon és képernyőképek">
+              <MediaUploader
+                packageName={formData.packageName}
+                iconUrl={formData.iconUrl}
+                screenshots={formData.screenshots}
+                onIconChange={(url) => setFormData((prev) => ({ ...prev, iconUrl: url }))}
+                onScreenshotsChange={(urls) => setFormData((prev) => ({ ...prev, screenshots: urls }))}
+              />
+            </FormSection>
           </div>
 
-          {/* Media Assets */}
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
-            <h2 className="text-base font-bold text-white border-b border-white/10 pb-3">
-              Média & Ikonok
-            </h2>
-
-            <MediaUploader
-              packageName={formData.packageName}
+          {/* Jobb oszlop: előnézet, új APK verzió, veszélyzóna */}
+          <div className="space-y-6 min-w-0 lg:sticky lg:top-24">
+            <AppPreview
+              title={formData.title}
+              versionName={formData.versionName}
+              sizeBytes={formData.sizeBytes}
               iconUrl={formData.iconUrl}
-              screenshots={formData.screenshots}
-              onIconChange={(url) => setFormData((prev) => ({ ...prev, iconUrl: url }))}
-              onScreenshotsChange={(urls) => setFormData((prev) => ({ ...prev, screenshots: urls }))}
+              accessLevel={formData.accessLevel}
             />
-          </div>
 
-          {/* APK Update & NAS Version Retention */}
-          <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
-            <div>
-              <h2 className="text-base font-bold text-white flex items-center justify-between">
-                <span>Új APK Verzió Feltöltése (4MB Darabolt WebDAV)</span>
-                <span className="text-xs text-slate-400 font-mono">
-                  Jelenlegi méret: {(formData.sizeBytes / (1024 * 1024)).toFixed(1)} MB
+            <FormSection
+              step={4}
+              title="Új APK verzió feltöltése"
+              aside={
+                <span className="text-[11px] text-ink-400 font-mono">
+                  Jelenlegi: v{app?.versionName} · {((app?.sizeBytes ?? formData.sizeBytes) / (1024 * 1024)).toFixed(1)} MB
                 </span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Új verzió feltöltésekor a korábbi aktív verzió automatikusan biztonsági másolatként (backup)
+              }
+            >
+              <p className="text-xs text-ink-400">
+                Új verzió feltöltésekor a korábbi aktív verzió automatikusan biztonsági másolatként
                 mentődik a WebDAV szerveren.
               </p>
-            </div>
+              <ChunkedUploader
+                packageName={formData.packageName}
+                versionCode={formData.versionCode}
+                onUploadSuccess={({ apkWebDavPath, sizeBytes }) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    apkWebDavPath,
+                    sizeBytes,
+                  }));
+                }}
+              />
+            </FormSection>
 
-            <ChunkedUploader
-              packageName={formData.packageName}
-              versionCode={formData.versionCode}
-              onUploadSuccess={({ apkWebDavPath, sizeBytes }) => {
-                setFormData((prev) => ({
-                  ...prev,
-                  apkWebDavPath,
-                  sizeBytes,
-                }));
-              }}
-            />
-          </div>
+            {error && (
+              <div className="flex items-center gap-2 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          {error && (
-            <div className="flex items-center gap-2 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
-
-          <div className="flex items-center justify-end gap-4">
-            <Link
-              href="/admin"
-              className="px-5 py-3 rounded-xl text-sm font-semibold text-slate-300 hover:bg-white/5 border border-white/10 transition-colors"
-            >
-              Mégse
-            </Link>
-
-            <button
-              type="submit"
-              disabled={saving}
-              className="glow-button px-8 py-3.5 rounded-xl text-sm font-bold text-white flex items-center gap-2 shadow-lg disabled:opacity-50 transition-all"
-            >
-              <Save className="w-4 h-4" />
-              <span>{saving ? 'Mentés folyamatban...' : 'Módosítások Mentése'}</span>
-            </button>
+            <section className="rounded-2xl border border-amber-500/30 bg-surface-card p-5 flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-400">Veszélyzóna</p>
+                <p className="text-xs text-ink-400">Az alkalmazás és a NAS-on tárolt fájljai végleg törlődnek.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border border-amber-500/40 text-amber-400 hover:bg-amber-500/10 disabled:opacity-40"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Törlés
+              </button>
+            </section>
           </div>
         </form>
       </main>

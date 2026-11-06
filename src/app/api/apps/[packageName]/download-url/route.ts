@@ -3,6 +3,8 @@ import { connectToDatabase } from '@/lib/db';
 import AppItem from '@/lib/models/AppItem';
 import { getUserFromRequest, canUserAccessApp } from '@/lib/userAuth';
 import { buildDirectDownloadUrl } from '@/lib/storageApi';
+import { getClientSecret, getDownloadKey } from '@/lib/settings';
+import { encryptForClient } from '@/lib/secretBox';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,8 +35,42 @@ export async function GET(req: NextRequest, context: RouteContext) {
       );
     }
 
-    const directDownloadUrl = buildDirectDownloadUrl(app.apkWebDavPath);
     const fileName = `${packageName}-v${app.versionCode}.apk`;
+    const downloadKey = await getDownloadKey();
+    const nonce = req.headers.get('x-nova-nonce');
+
+    // Új kliensek (x-nova-nonce fejléc): a letöltési kulcs NEM szerepel az URL-ben, hanem
+    // titkosítva (AES-256-GCM) érkezik; a kulcsot az app a nonce-ból és a közös titokból származtatja.
+    if (nonce) {
+      const clientSecret = await getClientSecret();
+      if (!downloadKey || !clientSecret) {
+        console.error('Titkosított letöltési kulcs nem adható ki: letöltési kulcs vagy app-titok hiányzik.');
+        return NextResponse.json(
+          { error: 'A letöltés jelenleg nem érhető el (a szerver kulcsai nincsenek beállítva).' },
+          { status: 503 }
+        );
+      }
+      let envelope;
+      try {
+        envelope = encryptForClient(downloadKey, clientSecret, nonce, app.packageName);
+      } catch (e: any) {
+        return NextResponse.json({ error: 'Érvénytelen titkosítási kérés.' }, { status: 400 });
+      }
+      return NextResponse.json({
+        success: true,
+        downloadUrl: buildDirectDownloadUrl(app.apkWebDavPath, { omitKey: true }),
+        encryptedKey: envelope,
+        fileName,
+        totalBytes: Number(app.sizeBytes) || 0,
+        versionCode: app.versionCode,
+        versionName: app.versionName,
+      });
+    }
+
+    // Régi kliensek (visszafelé kompatibilitás): a kulcs az URL-ben utazik, mint korábban.
+    const directDownloadUrl = buildDirectDownloadUrl(app.apkWebDavPath, {
+      apiKey: downloadKey || undefined,
+    });
 
     return NextResponse.json({
       success: true,

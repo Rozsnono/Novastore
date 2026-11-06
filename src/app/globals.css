@@ -55,3 +55,59 @@ html, body {
   background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
   box-shadow: 0 0 30px rgba(99, 102, 241, 0.55);
 }
+
+/* ==========================================================================
+   Admin téma – "Karmazsin" (sötét, piros akcent)
+   Az .admin-theme (admin) és .nova-theme (nyilvános főoldal) alatt él; a többi oldalt nem érinti.
+   A közös osztályokat (glass-panel, glass-card, glow-button) itt írjuk felül.
+   ========================================================================== */
+.nova-theme , .admin-theme {
+  min-height: 100vh;
+  background: #0f0e0e;
+  color: #f1ecec;
+  letter-spacing: 0.01em;
+}
+
+/* Oldalsáv + tartalom: ha van oldalsáv, asztali nézetben hely kell neki. */
+@media (min-width: 1024px) {
+  .admin-theme:has(.admin-sidebar) { padding-left: 15rem; }
+}
+@media (max-width: 1023px) {
+  .admin-theme:has(.admin-sidebar) { padding-bottom: 5rem; }
+}
+
+.nova-theme .glass-panel, .admin-theme .glass-panel,
+.nova-theme .glass-card , .admin-theme .glass-card {
+  background: #1a1717;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid #272222;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.nova-theme .glass-card:hover , .admin-theme .glass-card:hover {
+  transform: none;
+  border-color: rgba(229, 56, 59, 0.45);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.nova-theme .glow-button , .admin-theme .glow-button {
+  background: #e5383b;
+  box-shadow: none;
+  color: #fff;
+}
+.nova-theme .glow-button:hover , .admin-theme .glow-button:hover {
+  background: #c92a2d;
+  box-shadow: none;
+}
+.nova-theme input, .admin-theme input,
+.nova-theme select, .admin-theme select,
+.nova-theme textarea , .admin-theme textarea {
+  color-scheme: dark;
+}
+.nova-theme ::selection, .admin-theme ::selection { background: #e5383b; color: #fff; }
+
+/* Nyilvános főoldal: a címsor-kiemelés a piros témához igazodik */
+.nova-theme .gradient-text {
+  background: linear-gradient(135deg, #ff9a9c 0%, #e5383b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

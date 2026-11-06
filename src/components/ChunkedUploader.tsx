@@ -12,20 +12,21 @@ interface ChunkedUploaderProps {
 
 // 20MB chunk size: maximizes upload throughput directly to Synology NAS (same as NewFileSharer)
 const CHUNK_SIZE = 20 * 1024 * 1024;
-// Nincs kódba égetett tartalék kulcs. FIGYELEM: a NEXT_PUBLIC_ változó a böngészőbe kerül (lásd AGENTS.md, ismert korlátozások).
-const UPLOAD_API_KEY = process.env.NEXT_PUBLIC_UPLOAD_API_KEY || '';
-
-function resolveUploadApiUrl(): string {
-  // Nincs kódba égetett tartalék URL (konfigurációból jön); hiány esetén érthető hiba.
-  const configured0 = (process.env.NEXT_PUBLIC_UPLOAD_API_URL || '').trim();
-  if (!configured0) {
-    throw new Error('A feltöltés nincs konfigurálva (hiányzó NEXT_PUBLIC_UPLOAD_API_URL). Értesítsd a rendszergazdát.');
+/**
+ * A feltöltő szolgáltatás URL-je és kulcsa a bejelentkezett adminnak szóló végpontról jön
+ * (Beállítások oldalon adható meg) – a kulcs így nem kerül a publikus JavaScript csomagba.
+ */
+async function loadUploadConfig(): Promise<{ apiUrl: string; apiKey: string }> {
+  const res = await fetch('/api/admin/upload-config');
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json?.data?.apiKey || !json?.data?.apiUrl) {
+    throw new Error(json?.error || 'A feltöltési konfiguráció nem érhető el. Ellenőrizd a Beállítások oldalt.');
   }
-  let configured = configured0;
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && configured.startsWith('http://')) {
-    configured = configured.replace(/^http:\/\//, 'https://');
+  let apiUrl: string = String(json.data.apiUrl).trim();
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && apiUrl.startsWith('http://')) {
+    apiUrl = apiUrl.replace(/^http:\/\//, 'https://');
   }
-  return configured.replace(/\/+$/, '');
+  return { apiUrl: apiUrl.replace(/\/+$/, ''), apiKey: String(json.data.apiKey) };
 }
 
 export default function ChunkedUploader({
@@ -94,15 +95,23 @@ export default function ChunkedUploader({
       return;
     }
 
-    if (!UPLOAD_API_KEY) {
-      setError('A feltöltés nincs konfigurálva (hiányzó NEXT_PUBLIC_UPLOAD_API_KEY). Értesítsd a rendszergazdát.');
-      return;
-    }
-
     setUploading(true);
     setError(null);
     setIsDone(false);
     setProgress(0);
+
+    // Feltöltési kulcs és URL betöltése a szerverről (adminnak szóló végpont)
+    let UPLOAD_API_KEY: string;
+    let uploadApiUrl: string;
+    try {
+      const cfg = await loadUploadConfig();
+      UPLOAD_API_KEY = cfg.apiKey;
+      uploadApiUrl = cfg.apiUrl;
+    } catch (cfgErr: any) {
+      setUploading(false);
+      setError(cfgErr.message);
+      return;
+    }
 
     const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
     // Relatív útvonal: a szolgáltatás a saját feltöltési gyökere (WEBDAV_UPLOAD_DIR, pl. /EpochMedia)
@@ -112,15 +121,6 @@ export default function ChunkedUploader({
     const baseDir = (process.env.NEXT_PUBLIC_UPLOAD_TARGET_DIR || 'novastore/apps').replace(/^\/+|\/+$/g, '');
     const targetPath = `${baseDir}/${sanitizedPackage}/apk`;
     const targetFilename = `app-v${numericVersion}.apk`;
-    let uploadApiUrl: string;
-    try {
-      uploadApiUrl = resolveUploadApiUrl();
-    } catch (cfgErr: any) {
-      setUploading(false);
-      setError(cfgErr.message);
-      return;
-    }
-
     let remoteUploadId: string | null = null;
     const startTime = Date.now();
     let totalUploadedBytes = 0;
@@ -308,10 +308,10 @@ export default function ChunkedUploader({
           isDone
             ? 'border-emerald-500/50 bg-emerald-500/5'
             : error
-            ? 'border-red-500/50 bg-red-500/5'
+            ? 'border-amber-500/50 bg-amber-500/5'
             : file
-            ? 'border-indigo-500/50 bg-indigo-500/5'
-            : 'border-white/10 hover:border-indigo-500/40 bg-white/[0.02]'
+            ? 'border-acc-500/50 bg-acc-500/5'
+            : 'border-white/10 hover:border-acc-500/40 bg-white/[0.02]'
         } ${uploading || disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
       >
         <input
@@ -327,25 +327,25 @@ export default function ChunkedUploader({
           {isDone ? (
             <CheckCircle2 className="w-10 h-10 text-emerald-400" />
           ) : file ? (
-            <FileCode2 className="w-10 h-10 text-indigo-400 animate-pulse" />
+            <FileCode2 className="w-10 h-10 text-acc-400 animate-pulse" />
           ) : (
-            <Upload className="w-10 h-10 text-slate-400" />
+            <Upload className="w-10 h-10 text-ink-400" />
           )}
 
           <div>
             {file ? (
               <div className="space-y-1">
-                <p className="font-semibold text-slate-200">{file.name}</p>
-                <p className="text-xs text-slate-400">
+                <p className="font-semibold text-ink-200">{file.name}</p>
+                <p className="text-xs text-ink-400">
                   {totalSizeMB} MB • {Math.ceil(file.size / CHUNK_SIZE)} szelet (20MB közvetlen NAS szeletek)
                 </p>
               </div>
             ) : (
               <div className="space-y-1">
-                <p className="text-sm font-medium text-slate-200">
+                <p className="text-sm font-medium text-ink-200">
                   Kattints ide vagy húzd ide az Android APK fájlt
                 </p>
-                <p className="text-xs text-slate-500">Minden szabványos Android csomag támogatott (.apk)</p>
+                <p className="text-xs text-ink-500">Minden szabványos Android csomag támogatott (.apk)</p>
               </div>
             )}
           </div>
@@ -379,8 +379,8 @@ export default function ChunkedUploader({
         <div className="space-y-3 bg-black/40 p-4 rounded-2xl border border-white/10 shadow-lg">
           {/* Top Status & Percentage */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
-            <span className="text-slate-300 font-medium">{statusMessage}</span>
-            <span className="font-mono text-indigo-400 font-bold text-sm sm:text-xs">
+            <span className="text-ink-300 font-medium">{statusMessage}</span>
+            <span className="font-mono text-acc-400 font-bold text-sm sm:text-xs">
               {progress}%
             </span>
           </div>
@@ -388,7 +388,7 @@ export default function ChunkedUploader({
           {/* Progress Bar */}
           <div className="w-full h-2.5 bg-white/10 rounded-full overflow-hidden p-0.5">
             <div
-              className="h-full bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 transition-all duration-300 rounded-full shadow-sm"
+              className="h-full bg-gradient-to-r from-acc-600 to-acc-400 transition-all duration-300 rounded-full shadow-sm"
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -396,18 +396,18 @@ export default function ChunkedUploader({
           {/* Metrics Row: Speed, Uploaded MB, Estimated Time Remaining */}
           <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/5 text-[11px]">
             {/* Speed */}
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <Zap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <div className="flex items-center gap-1.5 text-ink-300">
+              <Zap className="w-3.5 h-3.5 text-acc-400 shrink-0" />
               <div>
-                <p className="text-[10px] text-slate-500 uppercase font-semibold">Sebesség</p>
+                <p className="text-[10px] text-ink-500 uppercase font-semibold">Sebesség</p>
                 <p className="font-mono font-bold text-white">{uploadSpeedMBs} MB/s</p>
               </div>
             </div>
 
             {/* Transferred Size */}
-            <div className="flex items-center gap-1.5 text-slate-300 text-center justify-center">
+            <div className="flex items-center gap-1.5 text-ink-300 text-center justify-center">
               <div>
-                <p className="text-[10px] text-slate-500 uppercase font-semibold">Átvitel</p>
+                <p className="text-[10px] text-ink-500 uppercase font-semibold">Átvitel</p>
                 <p className="font-mono font-bold text-white">
                   {uploadedMB} / {totalSizeMB} MB
                 </p>
@@ -415,10 +415,10 @@ export default function ChunkedUploader({
             </div>
 
             {/* Estimated Remaining Time (ETA) */}
-            <div className="flex items-center gap-1.5 text-slate-300 justify-end text-right">
+            <div className="flex items-center gap-1.5 text-ink-300 justify-end text-right">
               <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <div>
-                <p className="text-[10px] text-slate-500 uppercase font-semibold">Hátralévő idő</p>
+                <p className="text-[10px] text-ink-500 uppercase font-semibold">Hátralévő idő</p>
                 <p className="font-bold text-emerald-400">
                   {estimatedTimeStr || 'számítás...'}
                 </p>
@@ -429,7 +429,7 @@ export default function ChunkedUploader({
       )}
 
       {error && (
-        <div className="flex items-center gap-2 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+        <div className="flex items-center gap-2 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span>{error}</span>
         </div>
