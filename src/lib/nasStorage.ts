@@ -20,12 +20,24 @@ import { getDownloadKey, getDownloadUrl, getUploadKey, getUploadUrl } from './se
 import { toStorageApiPath } from './storageApi';
 
 /** Az appok könyvtára a tárolón (kulcs mappájához / feltöltési gyökérhez képest). */
-const APPS_DIR = (process.env.APPS_STORAGE_DIR || process.env.WEBDAV_ROOT_PATH || '/novastore/apps').replace(/\/$/, '');
+// Gyökérhez képesti (relatív) útvonal: a szolgáltatás a relatív útvonalat mindig a kulcs gyökere alá teszi,
+// így nem függ a gyökér nevétől. Az érték elejéről a perjelet levágjuk.
+const APPS_DIR = (process.env.APPS_STORAGE_DIR || process.env.WEBDAV_ROOT_PATH || 'novastore/apps')
+  .replace(/^\/+/, '')
+  .replace(/\/+$/, '');
 
 /** Egy apphoz tartozó könyvtár a tárolón. */
 export function getAppStoragePath(packageName: string): string {
   const sanitizedPackage = packageName.replace(/[^a-zA-Z0-9._-]/g, '_');
   return `${APPS_DIR}/${sanitizedPackage}`;
+}
+
+/**
+ * A szolgáltatásnak küldött útvonal: a "/"-lel kezdődő (tárolt, gyökeres) útvonalat a megszokott módon
+ * (storageApi.toStorageApiPath), a relatív útvonalat változatlanul adjuk át – az mindig a kulcs gyökere alá kerül.
+ */
+function apiPath(p: string): string {
+  return p.startsWith('/') ? toStorageApiPath(p) : p;
 }
 
 /** A tárolón lévő fájl/mappa leírása (a /download/info és /download/list válaszaiból). */
@@ -75,7 +87,8 @@ async function describeError(res: Response, what: string): Promise<string> {
   let detail = '';
   try {
     const json = await res.clone().json();
-    detail = json?.error || json?.message || '';
+    // A szolgáltatás `message` mezője tartalmazza a valódi okot (az `error` csak általános, pl. "Request Error")
+    detail = json?.message || json?.error || '';
   } catch {
     /* nem JSON válasz */
   }
@@ -88,7 +101,7 @@ async function describeError(res: Response, what: string): Promise<string> {
 
 /** Fájl metaadatai (méret, módosítás). Nem létező fájlnál hibát dob. */
 export async function nasStat(path: string): Promise<NasItem> {
-  const res = await nasFetch('read', `/download/info?path=${encodeURIComponent(toStorageApiPath(path))}`);
+  const res = await nasFetch('read', `/download/info?path=${encodeURIComponent(apiPath(path))}`);
   if (!res.ok) throw new Error(await describeError(res, 'A fájl adatai nem kérdezhetők le'));
   const json = await res.json();
   const f = json.file || {};
@@ -103,7 +116,7 @@ export async function nasStat(path: string): Promise<NasItem> {
 
 /** Könyvtár tartalma. Nem létező könyvtárnál hibát dob. */
 export async function nasList(dir: string): Promise<NasItem[]> {
-  const res = await nasFetch('read', `/download/list?path=${encodeURIComponent(toStorageApiPath(dir))}`);
+  const res = await nasFetch('read', `/download/list?path=${encodeURIComponent(apiPath(dir))}`);
   if (!res.ok) throw new Error(await describeError(res, 'A könyvtár nem listázható'));
   const json = await res.json();
   return (json.items || []).map((i: any) => ({
@@ -117,7 +130,7 @@ export async function nasList(dir: string): Promise<NasItem[]> {
 
 /** Teljes fájl memóriába (kis fájlokhoz: ikon, képernyőkép). */
 export async function nasReadBuffer(path: string): Promise<Buffer> {
-  const res = await nasFetch('read', `/download?path=${encodeURIComponent(toStorageApiPath(path))}`);
+  const res = await nasFetch('read', `/download?path=${encodeURIComponent(apiPath(path))}`);
   if (!res.ok) throw new Error(await describeError(res, 'A fájl nem tölthető le'));
   return Buffer.from(await res.arrayBuffer());
 }
@@ -127,7 +140,7 @@ export async function nasReadBuffer(path: string): Promise<Buffer> {
  * továbbíthatja, így nagy APK-k sem kerülnek memóriába.
  */
 export async function nasDownload(path: string, range?: string | null): Promise<Response> {
-  const res = await nasFetch('read', `/download?path=${encodeURIComponent(toStorageApiPath(path))}`, {
+  const res = await nasFetch('read', `/download?path=${encodeURIComponent(apiPath(path))}`, {
     headers: range ? { Range: range } : {},
   });
   // 206 (részleges) és 416 (nem teljesíthető tartomány) is továbbadandó a kliensnek
@@ -145,7 +158,7 @@ export async function nasDownload(path: string, range?: string | null): Promise<
 export async function nasDelete(path: string, recursive = false): Promise<void> {
   // A szolgáltatás dokumentációja szerint a törlés lekérdezési paraméterekkel megy (mappánál recursive=true);
   // a törzset is elküldjük, hogy a régebbi szolgáltatás-verzió is értse.
-  const target = toStorageApiPath(path);
+  const target = apiPath(path);
   const query = `path=${encodeURIComponent(target)}${recursive ? '&recursive=true' : ''}`;
   const res = await nasFetch('write', `/files?${query}`, {
     method: 'DELETE',
@@ -198,7 +211,7 @@ async function partBuffers(parts: Part[]): Promise<AsyncGenerator<Buffer>> {
  * hely; hibánál megszakítja a munkamenetet (`/upload/failed`), hogy ne maradjon szemét a tárolón.
  */
 async function nasUpload(dir: string, filename: string, parts: Part[], totalSize: number): Promise<void> {
-  const targetPath = toStorageApiPath(dir);
+  const targetPath = apiPath(dir);
 
   const startRes = await nasFetch('write', '/upload/start', {
     method: 'POST',
